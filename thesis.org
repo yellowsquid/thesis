@@ -10,13 +10,10 @@
 #+select_tags: export
 #+exclude_tags: noexport
 #+creator: Emacs 27.2 (Org mode 9.6)
-#+cite_export:
+#+cite_export: biblatex
+#+bibliography: ./thesis.bib
 #+latex_class: article
-#+latex_class_options: [a4paper]
+#+latex_class_options: [twocolumn,a4paper]
 #+latex_header: \usepackage[hyperref=true,url=true,backend=biber,natbib=true]{biblatex}
 #+latex_header: \usepackage{savetrees}
-#+latex_header_extra:
-#+description:
-#+keywords:
-#+subtitle:
 #+latex_compiler: pdflatex
