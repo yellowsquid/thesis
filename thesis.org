@@ -1,0 +1,22 @@
+#+options: ':t *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline author:t
+#+options: broken-links:nil c:nil creator:nil d:(not "LOGBOOK") date:t e:t
+#+options: email:nil f:t inline:t num:t p:nil pri:nil prop:nil stat:t tags:t
+#+options: tasks:t tex:t timestamp:t title:t toc:t todo:t |:t
+#+title: Semantics of an embedded vector architecture for formal verification of software
+#+date: \today
+#+author: Greg Brown
+#+email: greg.brown@cl.cam.ac.uk
+#+language: en-GB
+#+select_tags: export
+#+exclude_tags: noexport
+#+creator: Emacs 27.2 (Org mode 9.6)
+#+cite_export:
+#+latex_class: article
+#+latex_class_options: [a4paper]
+#+latex_header: \usepackage[hyperref=true,url=true,backend=biber,natbib=true]{biblatex}
+#+latex_header: \usepackage{savetrees}
+#+latex_header_extra:
+#+description:
+#+keywords:
+#+subtitle:
+#+latex_compiler: pdflatex
