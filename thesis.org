@@ -17,3 +17,29 @@
 #+latex_header: \usepackage[hyperref=true,url=true,backend=biber,natbib=true]{biblatex}
 #+latex_header: \usepackage{savetrees}
 #+latex_compiler: pdflatex
+
+#+begin_abstract
+All good implementations of any algorithm should be correct and fast. To
+maximise performance some algorithms are written in hand-tuned assembly. This
+can introduce subtle bugs that invalidate correctness or other safety
+properties. Whilst tools exists to help formally verify these algorithms, none
+are designed to target the recent M-profile Vector Extension for the Armv8.1-M
+architecture. This work describes a denotational and Hoare logic semantics for
+the language used to specify the instructions, and attempts to use them to
+formally verify the correctness of hand-written assembly for cryptographic
+applications.
+#+end_abstract
+
+* Introduction
+
+* Arm Pseudocode
+
+* Denotational Semantics
+
+* Hoare Semantics
+
+* Mathematical Proofs
+
+* Conclusions
+
+#+print_bibliography:
