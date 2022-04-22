@@ -1,7 +1,7 @@
 #+options: ':t *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline author:t
 #+options: broken-links:nil c:nil creator:nil d:(not "LOGBOOK") date:t e:t
 #+options: email:nil f:t inline:t num:t p:nil pri:nil prop:nil stat:t tags:t
-#+options: tasks:t tex:t timestamp:t title:t toc:t todo:t |:t
+#+options: tasks:t tex:t timestamp:t title:t toc:nil todo:t |:t
 #+title: Semantics of an embedded vector architecture for formal verification of software
 #+date: \today
 #+author: Greg Brown
@@ -13,7 +13,7 @@
 #+cite_export: biblatex
 #+bibliography: ./thesis.bib
 #+latex_class: article
-#+latex_class_options: [twocolumn,a4paper]
+#+latex_class_options: [twoside,a4paper]
 #+latex_header: \usepackage[hyperref=true,url=true,backend=biber,natbib=true]{biblatex}
 #+latex_header: \usepackage{savetrees}
 #+latex_compiler: pdflatex
@@ -32,14 +32,107 @@ applications.
 
 * Introduction
 
-* Arm Pseudocode
+In nearly all cases, the best implementation of an algorithm for a particular
+purpose is both correct and fast. If the implementation is not correct, then it
+does not implement the algorithm. If the implementation is slow, then resources are
+wasted executing this algorithm over performing other useful work. Ensuring
+implementations are both performant and correct is typically difficult.
 
-* Denotational Semantics
+One case that proves particularly tricky is writing assembly code. Most modern
+handwritten assembly is for cryptographic algorithms, where it is vital that
+compilers do not introduce timing attacks or other side channels. Hand written
+assembly can also take advantage of microarchitectural differences to gain a
+slight performance benefit.
 
-* Hoare Semantics
+Another domain that frequently deals with assembly code is the output of
+compilers. Optimising compilers take the semantic operations described by
+high-level code and attempt to produce the optimal machine code to perform those
+actions.
 
-* Mathematical Proofs
+In both of these cases, either humans or machines shuffle around instructions in
+an attempt to eek out the best performance from hardware. The resulting code
+warps the original algorithms in ways that make it difficult to determine
+whether the actions performed actually have the same result. The correctness of
+the assembly code comes into question.
+
+It is only possible to prove the assembly code is correct if there is a model
+describing how it should behave. Suitable mathematical models of the behaviour
+allow for the construction of formal proofs certifying the assembly code has the
+correct behaviour. Due to the size and complexity of different instruction set
+architectures (ISAs), formal verification of software in this manner makes use
+of a number of software tools.
+
+Formal verification software is well-developed for the x86-64 and Arm A-profile
+ISAs. For instance, Jasmin [cite:@10.1145/3133956.3134078] is a programming
+language which verifies that compiling to x86-64 preserves a set of user-defined
+safety properties. Another similar tool is CompCert [cite:@hal/01238879] which
+is a verified C compiler, ensuring that the program semantics are preserved
+during compilation.
+
+Unfortunately, little work has been done to formally verify software written for
+the Arm M-profile architecture. This architecture is designed for low-power and
+low-latency microcontrollers, which operate in resource-constrained
+environments.
+
+The goal of this project is to formally verify an assembly function for the Arm
+M-profile architecture. The specific algorithm
+[cite:@10.46586/tches.v2022.i1.482-505] is a hand-written highly-optimised
+assembly-code implementation of the number-theoretic transform, which is an
+important procedure for post-quantum cryptography.
+
+This work has made progress on two fronts. Most work has been spent developing
+an embedding and semantic model of the Armv8.1-M pseudocode specification
+language for the Agda programming language [cite:@10.1007/978-3-642-03359-9_6].
+All instructions in the Armv8.1-M architecture are given a "precise description"
+[cite:@arm/DDI0553B.s § \(\texttt{I}_\texttt{RTDZ}\)] using the pseudocode, and
+by developing an embedding within Agda, it is possible to use its powerful type
+system to construct formal proofs of correctness.
+
+Progress has also been made on the formal algebraic verification of Barrett
+reduction, a subroutine of the NTT.  Whilst there exists a paper proof of the
+correctness of Barrett reduction, a proof of Barrett reduction within Agda is
+necessary to be able to prove the correctness of the given implementation of the
+NTT.
+
+Structure of the paper:
+- [[Armv8.1-M Pseudocode Specification Language]] describes the Armv8.1-M pseudocode
+  specification language. This is an imperative programming language used by the
+  Armv8.1-M manual to describe the operation of the instructions.
+- A simple recap of Hoare logic is given in [[Hoare Logic]]. This is the backbone of
+  one of the formal verification techniques used in this work.
+- [[Formal Definition of MSL]] contains a description of MSL. This is a language
+  similar to the Armv8.1-M pseudocode embedded within the Agda programming
+  language.
+- The denotational semantics and a Hoare logic semantics of MSL are detailed in
+  [[Semantics of MSL]]. Due to Agda's nature of being a dependently-typed language,
+  these are both given using Agda code.
+- [[Application to Proofs]] describes the experience of using the Hoare logic and
+  denotational semantics of MSL to prove the correctness of some simple
+  routines, given in [[Proofs using Hoare Semantics]] and [[Proofs using Denotational
+  Semantics]] respectively.
+- Formal verification of Barrett reduction, an important subroutine in the NTT,
+  is given in [[Proofs of Barrett Reduction]]. In particular, it proves that Barrett
+  reduction performs a modulo reduction and gives bounds on the size of the
+  result.
+- Finally, [[Future Work]] describes the steps necessary to complete the formal
+  verification of the NTT, as well as listing some other directions this work
+  can be taken.
+
+* Background
+** Armv8.1-M Pseudocode Specification Language
+** Hoare Logic
+
+* Implementation
+** Formal Definition of MSL
+** Semantics of MSL
+
+* Application to Proofs
+** General Observations
+** Proofs using Hoare Semantics
+** Proofs using Denotational Semantics
+** Proofs of Barrett Reduction
 
 * Conclusions
+** Future Work
 
 #+print_bibliography:
