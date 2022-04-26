@@ -30,19 +30,23 @@ formally verify the correctness of hand-written assembly for cryptographic
 applications.
 #+end_abstract
 
+# Flip this all around. What am I doing? What is the stuff? Why is it hard? (Why
+# am I smart?)
 * Introduction
 
+# Merge these two paras
 In nearly all cases, the best implementation of an algorithm for a particular
 purpose is both correct and fast. If the implementation is not correct, then it
 does not implement the algorithm. If the implementation is slow, then resources are
 wasted executing this algorithm over performing other useful work. Ensuring
 implementations are both performant and correct is typically difficult.
 
-One case that proves particularly tricky is writing assembly code. Most modern
-handwritten assembly is for cryptographic algorithms, where it is vital that
-compilers do not introduce timing attacks or other side channels. Hand written
-assembly can also take advantage of microarchitectural differences to gain a
-slight performance benefit.
+One case that proves particularly tricky is writing assembly code.
+# dubious claim
+Most modern handwritten assembly is for cryptographic algorithms, where it is
+vital that compilers do not introduce timing attacks or other side channels.
+Hand written assembly can also take advantage of microarchitectural differences
+to gain a slight performance benefit.
 
 Another domain that frequently deals with assembly code is the output of
 compilers. Optimising compilers take the semantic operations described by
@@ -94,6 +98,7 @@ correctness of Barrett reduction, a proof of Barrett reduction within Agda is
 necessary to be able to prove the correctness of the given implementation of the
 NTT.
 
+# Focus on contributions
 Structure of the paper:
 - [[Armv8.1-M Pseudocode Specification Language]] describes the Armv8.1-M pseudocode
   specification language. This is an imperative programming language used by the
