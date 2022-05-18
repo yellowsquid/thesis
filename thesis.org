@@ -27,6 +27,7 @@
 #+latex_header: \usepackage{parskip}        % vertical space for paragraphs
 #+latex_header: \usepackage{setspace}       % line spacing
 #+latex_header: \usepackage{newunicodechar} % unicode in code snippets
+#+latex_header: \usepackage{ebproof}        % Hoare logic rules
 #+latex_header: \usepackage{mathtools}      % a math character?
 #+latex_header: \usepackage{stmaryrd}       % some math characters
 #+latex_header: \usepackage{refcount}       % for counting pages
@@ -40,8 +41,11 @@
 #+latex_header: \newunicodechar{Σ}{\ensuremath{\Sigma}}
 #+latex_header: \newunicodechar{γ}{\ensuremath{\gamma}}
 #+latex_header: \newunicodechar{δ}{\ensuremath{\delta}}
+#+latex_header: \newunicodechar{ε}{\ensuremath{\epsilon}}
 #+latex_header: \newunicodechar{λ}{\ensuremath{\lambda}}
 #+latex_header: \newunicodechar{σ}{\ensuremath{\sigma}}
+#+latex_header: \newunicodechar{ˡ}{\ensuremath{^\texttt{l}}}
+#+latex_header: \newunicodechar{ʳ}{\ensuremath{^\texttt{r}}}
 #+latex_header: \newunicodechar{ᵗ}{\ensuremath{^\texttt{t}}}
 #+latex_header: \newunicodechar{′}{\ensuremath{'}}
 #+latex_header: \newunicodechar{₁}{\ensuremath{_1}}
@@ -54,7 +58,7 @@
 #+latex_header: \newunicodechar{ℚ}{\ensuremath{\mathbb{Q}}}
 #+latex_header: \newunicodechar{ℝ}{\ensuremath{\mathbb{R}}}
 #+latex_header: \newunicodechar{ℤ}{\ensuremath{\mathbb{Z}}}
-#+latex_header: \newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+#+latex_header: \newunicodechar{⇒}{\ensuremath{\rightarrow}}
 #+latex_header: \newunicodechar{∀}{\ensuremath{\forall}}
 #+latex_header: \newunicodechar{∃}{\ensuremath{\exists}}
 #+latex_header: \newunicodechar{∘}{\ensuremath{\circ}}
@@ -67,6 +71,7 @@
 #+latex_header: \newunicodechar{≔}{\ensuremath{\coloneqq}}
 #+latex_header: \newunicodechar{≟}{\ensuremath{\buildrel ?\over =}}
 #+latex_header: \newunicodechar{≡}{\ensuremath{\equiv}}
+#+latex_header: \newunicodechar{≢}{\ensuremath{\not\equiv}}
 #+latex_header: \newunicodechar{⊆}{\ensuremath{\subseteq}}
 #+latex_header: \newunicodechar{⊎}{\ensuremath{\uplus}}
 #+latex_header: \newunicodechar{⊤}{\ensuremath{\top}}
@@ -181,7 +186,7 @@ Main chapters (excluding front-matter, references and appendix):
 
 #+name: wordcount
 #+begin_src elisp :exports none :eval export
-(if (not (boundp squid-eval))
+(if (not (boundp 'squid-eval))
     (setq squid-eval nil))
 
 (if (not squid-eval)
@@ -252,9 +257,10 @@ is necessary.
 
 This report focuses on formalising the semantics of the Armv8-M architecture.
 [cite/t:@arm/DDI0553B.s] provides a pseudocode description of the operation of
-Armv8-M instructions using the Arm pseudocode (henceforth "the pseudocode").
-Unfortunately this language is primarily designed for describing instructions
-(FIXME: cite) and not proving properties of executing them.
+Armv8-M instructions using the Arm pseudocode (henceforth \ldquo{}the
+pseudocode\rdquo{}).  Unfortunately this language is primarily designed for
+describing instructions (FIXME: cite) and not proving properties of executing
+them.
 
 To remedy this, I designed AMPSL, which mocks the pseudocode specification
 language. AMPSL is written in the dependently-typed Agda proof assistant
@@ -272,10 +278,10 @@ modifies assertions on the processor state.
 
 Another significant line of work undertaken by this report is the formal
 verification of Barrett reduction. Barrett reduction is an important subroutine
-used by the NTT, to efficiently find a "small" representable of a value modulo
-some base [cite:@10.1007/3-540-47721-7_24]. Much like how a formalisation of the
-NTT is a big step in formalising the behaviour of many PQC algorithms,
-formalising Barrett reduction is a big step in formalising the NTT.
+used by the NTT, to efficiently find a \ldquo{}small\rdquo{} representable of a
+value modulo some base [cite:@10.1007/3-540-47721-7_24]. Much like how a
+formalisation of the NTT is a big step in formalising the behaviour of many PQC
+algorithms, formalising Barrett reduction is a big step in formalising the NTT.
 
 The main contributions of this report are as follows:
 - In [[*AMPSL Syntax]], I introduce the syntax of the AMPSL programming language.
@@ -335,8 +341,241 @@ The main contributions of this report are as follows:
 # rest of the dissertation.
 
 ** Arm Pseudocode
+The Armv8.1-M pseudocode specification language is a strongly-typed imperative
+programming language [cite:@arm/DDI0553B.s §E1.2.1]. It has a first-order type
+system, a small set of operators and basic control flow, as you would find in
+most imperative languages. Its primary purpose is to explain how executing an
+Armv8-M instruction modifies the visible processor state. As it is a descriptive
+aid, the pseudocode features a number of design choices atypical of other
+imperative programming languages making execution difficult.
+
+Something common to nearly all imperative languages is the presence of a
+primitive type for Booleans. Other typical type constructors are tuples,
+structs, enumerations and fixed-length arrays. The first interesting type used
+by the pseudocode is mathematical integers as a primitive type. Most imperative
+languages use fixed-width integers for primitive types, with exact integers
+available through some library. Examples include Rust (FIXME: cite), C (FIXME:
+cite), Java (FIXME: cite) and Go (FIXME: cite). This is because the performance
+benefits of using fixed-width integers in code far outweigh the risk of
+overflow. As checking for integer overflow complicates algorithms, and the
+pseudocode is not designed to execute, the pseudocode can make use of exact
+mathematical integers to eliminate overflow errors without any of the drawbacks
+[cite:@arm/DDI0553B.s §E1.3.4].
+
+Another odd type present in the pseudocode is mathematical real numbers. As most
+real numbers are impossible to record using finite storage, any executable
+programming language must make compromises to the precision of real numbers.
+This is usually achieved through floating-point numbers, which represent only a
+negligible fraction of possible real number values. However, as the pseudocode
+is not executable, the types it use do not need to have a finite representation.
+Thus it is free to use real numbers and have exact precision in real-number
+arithmetic [cite:@arm/DDI0553B.s §E1.2.4].
+
+The final primitive type used by the pseudocode is the bitstring; a fixed-length
+sequence of 0s and 1s. Some readers may wonder what the difference is between
+this type and arrays of Booleans. The justification given by
+[cite/t:@arm/DDI0553B.s §E1.2.2] is more philosophical than practical:
+\ldquo{}bitstrings are the only concrete data type in pseudocode\rdquo{}. In
+some places, bitstrings can be used instead of integers in arithmetic
+operations, by first converting them to an unsigned integer.
+
+Most of the operators used by the pseudocode are unsurprising. For instance,
+Booleans have the standard set of short-circuiting operations; integers and
+reals have addition, subtraction and multiplication; reals have division;
+integers have integer division (division rounding to \(-\infty\)) and modulus
+(the remainder of division); and concatenation of bitstrings.
+
+The most interesting operation in the pseudocode is bitstring slicing. First,
+there is no type for a bit outside a bitstring---a single bit is represented as
+a bitstring of length one---so bitstring slicing always returns a bitstring.
+Slicing then works in much the same way as array slicing in languages like
+Python (FIXME: cite?) and Rust (FIXME: cite?); slicing an integer range from a
+bitstring returns a new bitstring with values corresponding to the indexed bits.
+The other special feature of bitstring slicing is that an integer can be sliced
+instead of a bitstring. In that case, the pseudocode \ldquo{}treats an integer
+as equivalent to a sufficiently long [\ldots] bitstring\rdquo{}
+[cite:@arm/DDI0553B.s §E1.3.3].
+
+The final interesting difference between the pseudocode and most imperative
+languages is the variety of top-level items. The pseudocode has three forms of
+items: procedures, functions and array-like functions. Procedures and functions
+behave like procedures and functions of other imperative languages. The
+arguments to them are passed by value, and the only difference between the two
+is that procedures do not return values whilst functions do
+[cite:@arm/DDI0553B.s §E1.4.2].
+
+Array-like functions act as getters and setters for machine state. Every
+array-like function has a reader form, and most have a writer form. This
+distinction exists because \ldquo{}reading from and writing to an array element
+require different functions\rdquo{}, [cite:@arm/DDI0553B.s §E1.4.2], likely due
+to the nature of some machine registers being read-only instead of
+read-writeable. The writer form acts as one of the targets of assignment
+expressions, along with variables and the result of bitstring concatenation and
+slicing [cite:@arm/DDI0553B.s §E1.3.5].
+
+(FIXME: examples)
+
 ** Hoare Logic
+Hoare logic is a proof system for programs written in imperative programming
+languages. At its core, the logic describes how to build partial correctness
+triples, which describe how program statements affect assertions about machine
+state. The bulk of a Hoare logic derivation is dependent only on the syntax of
+the program the proof targets.
+
+A partial correctness triple is a relation between a precondition \(P\), a
+program statement \(s\) and a postcondition \(Q\). If \(\{P\} s \{Q\}\) is a
+partial correctness triple, then whenever \(P\) holds for some machine state,
+then when executing \(s\), \(Q\) holds for the state after it terminates
+[cite:@10.1145/363235.363259]. This is a /partial/ correctness triple because
+the postcondition only holds if \(s\) terminates. When all statements terminate,
+this relation is called a correctness triple.
+
+#+name: WHILE-Hoare-logic
+#+caption: Hoare logic rules for the WHILE language, consisting of assignment,
+#+caption: if statements and while loops. The top three lines show the structural
+#+caption: rules, and the bottom shows the adaptation rule.
+#+begin_figure
+\begin{center}
+\begin{prooftree}
+  \infer0[SKIP]{\{P\}\;\texttt{s}\;\{P\}}
+  \infer[rule style=no rule,rule margin=3ex]1{\{P\}\;\texttt{s₁}\;\{Q\}\qquad\{Q\}\;\texttt{s₂}\;\{R\}}
+  \infer1[SEQ]{\{P\}\;\texttt{s₁;s₂}\;\{Q\}}
+  \infer0[ASSIGN]{\{P[\texttt{x}/\texttt{v}]\}\;\texttt{x:=v}\;\{P\}}
+  \infer[rule style=no rule,rule margin=3ex]1{\{P \wedge \texttt{e}\}\;\texttt{s₁}\;\{Q\}\qquad\{P \wedge \neg \texttt{e}\}\;\texttt{s₂}\;\{Q\}}
+  \infer1[IF]{\{P\}\;\texttt{if e then s₁ else s₂}\;\{Q\}}
+  \infer[rule style=no rule,rule margin=3ex]2{\{P \wedge \texttt{e}\}\;\texttt{s}\;\{P\}}
+  \infer1[WHILE]{\{P\}\;\texttt{while e do s}\;\{P \wedge \neg \texttt{e}\}}
+  \infer[rule style=no rule,rule margin=3ex]1{\models P_1 \rightarrow P_2\qquad\{P_2\}\;\texttt{s}\;\{Q_2\}\qquad\models Q_2 \rightarrow Q_1}
+  \infer1[CSQ]{\{P_1\}\;\texttt{s}\;\{Q_1\}}
+\end{prooftree}
+\end{center}
+#+end_figure
+
+[[WHILE-Hoare-logic]] shows the rules Hoare introduced for the WHILE language
+[cite:@10.1145/363235.363259]. The SKIP and SEQ rules are straight-forward: the
+skip statement has no effect on state, and sequencing statements composes their
+effects. The IF rule is also uncomplicated. No matter which branch we take, the
+postcondition remains the same; an if statement does no computation after
+executing a branch.  Which branch we take depends on the value of ~e~. Because
+the value of ~e~ is known before executing a branch, it is added to the
+preconditions in the premises.
+
+The ASSIGN rule appears backwards upon first reading; the substitution is
+performed in the precondition, before the assignment occurs! When considered
+more deeply, you realise the reason for this reversal. Due to the assignment,
+any occurrence of ~v~ in the precondition can be replaced by ~x~, and the
+original value of ~x~ is lost. Hence the postcondition can only use ~x~ exactly
+where there was ~v~ in the precondition. This is enforced by the substitution.
+
+The final structural Hoare logic rule for the WHILE language is the WHILE rule.
+This rule can be derived by observing the fixed-point nature of a while
+statement. As ~while e do s~ is equivalent to ~if e then (s ; while e do s) else
+skip~, we can use the IF, SEQ and SKIP rules to solve the recursion equation for
+the precondition and postcondition of the while statement.
+
+The final Hoare logic rule is the rule of consequence, CSQ. This rule does not
+recurse on the structure of the statement ~s~, but instead adapts the
+precondition and postcondition. In this case, we can weaken the precondition and
+postcondition using logical implication.
+
+[cite/t:@10.1145/363235.363259] does not specify the logic used to evaluate the
+implications in the rule of consequence. Regular choices are first-order logic
+and higher-order logic
+[cite:@10.1007/s00165-019-00501-3;@10.1007/s001650050057]. For specifying
+program behaviour, one vital aspect of the choice of logic is the presence of
+auxiliary variables [cite:@10.1007/s001650050057]. Auxiliary variables are a set
+of variables that cannot be used within a program, but they can be quantified
+over within assertions or left as free variables. A free auxiliary variable
+remains constant between the precondition and postcondition, and are
+universally-quantified within proofs.
+
+ (FIXME: examples)
+
 ** Agda
+Agda is a dependently-typed proof assistant and functional programming language,
+based on Martin-Löf's type theory.  The work of
+[cite/t:@10.1007/978-3-642-03359-9_6] provides an excellent introduction to the
+language. This section provides a summary of the most important features for the
+implementation of AMPSL.
+
+*Inductive families*. Data types like you would find in ML or Haskell can not
+only be indexed by types, but by specific values. This is best illustrated by an
+example. Take for instance fixed-length vectors. They can be defined by the
+following snippet:
+
+#+begin_src agda2
+data Vec (A : Set) : ℕ → Set where
+  []  : Vec A 0
+  _∷_ : ∀ {n} → A → Vec A n → Vec A (suc n)
+#+end_src
+
+First consider the type of ~Vec~. It is a function that accepts a type ~A~ and a
+natural number, and returns a type. The position of ~A~ to the left of the colon
+is significant; it is a /parameter/ of ~Vec~ instead of an /index/. Parameters
+are required to be the same for all constructors, whilst indices can vary
+between constructors [cite:@agda.readthedocs.io p.
+\texttt{language/data-types.html}]. This means the following definition of ~Vec~
+is invalid:
+
+#+begin_src agda2
+data Vec (A : Set) (n : ℕ) : Set where
+  [] : Vec A 0
+  -- 0 ≢ n  -^
+  _\::_ : ∀ {n} → A → Vec A n → Vec A (suc n)
+  -- and suc n ≢ n -------------------^
+#+end_src
+
+Whilst the value of parameters is constant in the return values of constructors,
+they can vary across the arguments of constructors, even for the same type. One
+example of this is the ~Assertion~ type given in (FIXME: forwardref) later in
+the report. The ~all~ and ~some~ constructors both accept an ~Assertion Σ Γ (t ∷
+Δ)~, but because they return an ~Assertion Σ Γ Δ~ the definition is valid.
+
+*Parameterised modules and records*. Agda modules can accept parameters, which
+can be used anywhere in the module. This works well with Agda's record types,
+are a generalisation of a dependent product. (In fact, the builtin Σ type is
+defined using a record [cite:@agda.readthedocs.io p.
+\texttt{language/built-ins.html}].) The following snippet shows how records can
+be used to define a setoid-enriched monoid:
+
+#+begin_src agda2
+record Monoid ℓ₁ ℓ₂ : Set (ℓsuc (ℓ₁ \lub ℓ₂)) where
+  infixl 5 _∙_
+  infix 4 _≈_
+  field
+    Carrier : Set ℓ₁
+    _≈_     : Rel A ℓ₂
+    _∙_     : Op₂ Carrier
+    ε       : Carrier
+    refl    : ∀ {x} → x ≈ x
+    sym     : ∀ {x y} → x ≈ y → y ≈ x
+    trans   : ∀ {x y z} → x ≈ y → y ≈ z → x ≈ z
+    ∙-cong  : ∀ {x y u v} → x ≈ y → u ≈ v → x ∙ y ≈ u ∙ v
+    ∙-assoc : ∀ {x y z} → (x ∙ y) ∙ z ≈ x ∙ (y ∙ z)
+    ∙-idˡ   : ∀ {x} → ε ∙ x ≈ x
+    ∙-idʳ   : ∀ {x} → x ∙ ε ≈ x
+#+end_src
+
+This record bundles together an underlying ~Carrier~ type with an equality
+relation ~_≈_~, binary operator ~_∙_~ and identity element ~ε~. It also contains
+all the proofs necessary to show that ~_≈_~ is really an equality and that ~_∙_~
+and ~ε~ form a monoid.
+
+When a module is parameterised by a ~Monoid~, then the module has an abstract
+monoid. It can use the structure and laws given in the record freely, but it
+cannot use additional laws (e.g. commutativity) without an additional argument.
+This is useful when the operations and properties of a type are well-defined,
+but a good representation is unknown.
+
+*Instance arguments* Instance arguments are analogous to the type class
+constraints you find in Haskell [cite:@agda.readthedocs.io p.
+\texttt{language/instance-arguments.html}]. They are a special form of implicit
+argument that are solved via /instance resolution/ over unification.  Instance
+arguments are a good solution for cases where Agda tries \ldquo{}too
+hard\rdquo{} to find a solution for implicit arguments, and needs the implicit
+arguments to be specified implicitly. Using instance arguments instead can force
+a particular solution onto Agda without needing to give the arguments
+explicitly.
 
 * Related Work
 
@@ -405,3 +644,5 @@ The main contributions of this report are as follows:
 
 #+latex: \label{lastpage}
 #+latex: %TC:endignore
+
+#  LocalWords:  AMPSL Hoare NTT PQC structs bitstring bitstrings
