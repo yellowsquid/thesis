@@ -600,6 +600,39 @@ explicitly.
 # much. The correct choice will depend on what you're writing up, and
 # your own personal preference.
 
+There exist a multitude of formal verification tools designed to describe either
+the semantics of ISA instructions or prove the correctness of algorithms. This
+section describes some of the most significant work in the field and how the
+design of AMPSL improves upon it.
+
+** Sail
+
+Sail [cite:@10.1145/3290384] is a language for describing the instruction-set
+architecture semantics of processors. It has a syntax similar to the pseudocode
+specification of architectures and a first-order type system with dependent
+bitvector and numeric types. It is officially used by
+[cite/t:@riscv/spec-20191213] to specify the concurrent memory semantics of the
+RISC-V architecture.
+
+Sail has many different backends available, including sequential emulators,
+concurrency models and theorem-prover definitions. Further, there are tools to
+automatically translate documents from the Arm Specification Language into Sail
+(FIXME: cite).
+
+Despite the many advantages of Sail over other solutions, using Sail in this
+project is not suitable for a number of reasons. First is the poor or
+nonexistent documentation of the Sail theorem-proving backends. Trying to decode
+the output of these tools, given that the input for the RISC-V model is 1.2MiB,
+would be time consuming.
+
+Another reason to avoid Sail is the unnecessary complexity in modelling the ISA
+semantics. Sail attempts to model the full complexity of the semantics,
+particularly in the face of concurrent memory access. This complexity is
+unnecessary for the Arm M-profile architecture, as it has a single thread of
+execution. This makes the semantics much simpler to reason about.
+
+** ?
+
 * Design of AMPSL and its Semantics
 
 # This chapter may be called something else... but in general the
