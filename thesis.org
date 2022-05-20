@@ -634,14 +634,901 @@ execution. This makes the semantics much simpler to reason about.
 ** ?
 
 * Design of AMPSL and its Semantics
+In this chapter I introduce AMPSL, a language mocking the Arm pseudocode. AMPSL
+is defined within Agda, and makes judicious use of Agda's dependent-typing
+features to eliminate assertions and ensure programs cannot fail.
 
-# This chapter may be called something else... but in general the
-# idea is that you have one (or a few) ``meat'' chapters which describe
-# the work you did in technical detail.
+To construct proofs about how AMPSL behaves, it is necessary to describe its
+semantics. This is done through providing a denotational semantics. Denotational
+semantics interpret program expressions and statements as mathematical
+functions, something which Agda is well-suited to do.
+
+One downside of denotational semantics is that control flow for looping
+constructs is fully evaluated. This is inefficient for loops that undergo many
+iterations. This can be resolved by a syntax-directed Hoare logic for AMPSL.
+Hoare logic derivations assign a precondition and a postcondition assertion to
+each statement. These are chained together though a number of simple logical
+implications.
 
 ** AMPSL Syntax
+AMPSL is a language similar to the Armv8-M pseudocode specification language
+written entirely in Agda. Unfortunately, the pseudocode has a number of small
+features that make it difficult to work with in Agda directly. AMPSL makes a
+number of small changes to the pseudocode to better facilitate this embedding,
+typically generalising existing features of the pseudocode.
+
+*** AMPSL Types
+
+#+name: AMPSL-types
+#+caption: The Agda datatype representing the types present in AMPSL. Most have
+#+caption: a direct analogue in the Armv8-M pseudocode specification language
+#+attr_latex: :float t
+#+begin_src agda2
+data Type : Set where
+  bool  : Type
+  int   : Type
+  fin   : (n : ℕ) → Type
+  real  : Type
+  tuple : Vec Type n → Type
+  array : Type → (n : ℕ) → Type
+#+end_src
+
+[[AMPSL-types]] gives the Agda datatype representing the types of AMPSL. Most of
+these have a direct analogue to the pseudocode types. For example, ~bool~ is a
+Boolean, ~int~ mathematical integers, ~real~ is for mathematical real numbers
+and ~array~ constructs array types. Instead of an enumeration construct, AMPSL
+uses the ~fin n~ type, representing a finite set of ~n~ elements. Similarly,
+structs are represented by ~tuple~ types.
+
+The most significant difference between the pseudocode and AMPSL is the
+representation of bitstrings. Whilst the pseudocode has the ~bits~ datatype,
+AMPSL instead treats bitstrings as an array of Booleans.  This removes the
+distinction between arrays and bitstrings, and allows a number of operations to
+be generalised to work on both types. This makes AMPSL more expressive than the
+pseudocode, in the sense that there are a greater number and more concise ways
+to write expressions that are functionally equivalent.
+
+The pseudocode implicitly specifies three different properties of types: equality
+comparisons, order comparisons and arithmetic operations. Whilst the types
+satisfying these properties need to be listed explicitly in Agda, using instance
+arguments allows for these proofs to be elided whenever they are required.
+
+AMPSL has only two differences in types that satisfy these properties compared
+to the pseudocode. First, all array types have equality as long as the
+enumerated type also has equality. This is a natural generalisation of the
+equality between types, and allows for the AMPSL formulation of bitstrings as
+arrays of Booleans to have equality. Secondly, finite sets also have ordering.
+This change is primarily a convenience feature for comparing finite representing
+a subset of integers. As the pseudocode has no ordering comparisons between
+enumerations, this causes no problems for converting pseudocode programs into
+AMPSL.
+
+The final interesting feature of the types in AMPSL is implicit coercion for
+arithmetic. As pseudocode arithmetic is polymorphic for integers and reals,
+AMPSL needs a function to decide the type of the result. By describing the
+output type as a function on the input types, the same constructor can be used
+for all combinations of numeric inputs.
+
+*** AMPSL Expressions
+
+#+name: AMPSL-literalType
+#+caption: Mappings from AMPSL types into Agda types which can be used as
+#+caption: literal values. ~literalTypes~ is a function that returns a product
+#+caption: of the types given in the argument.
+#+begin_src agda
+literalType : Type → Set
+literalType bool        = Bool
+literalType int         = ℤ
+literalType (fin n)     = Fin n
+literalType real        = ℤ
+literalType (tuple ts)  = literalTypes ts
+literalType (array t n) = Vec (literalType t) n
+#+end_src
+
+Unlike the pseudocode, where only a few types have literal expressions, every
+type in AMPSL has a literal form. This mapping is part of the ~literalType~
+function, given in [[AMPSL-literalType]]. Most AMPSL literals accept the
+corresponding Agda type as a value. For instance, ~bool~ literals are Agda
+Booleans, and ~array~ literals are fixed-length Agda vectors of the
+corresponding underlying type. The only exception to this rule is for ~real~
+values. As Agda does not have a type representing mathematical reals, integers
+are used instead. This is sufficient as any real value occurring in the
+pseudocode in [cite:@arm/DDI0553B.s] is rational.
+
+# TODO: why is this sufficient?
+
+#+name: AMPSL-expr-prototypes
+#+caption: Prototypes of the numerous AMPSL program elements. Each one takes two
+#+caption: variable contexts: ~Σ~ for global variables and ~Γ~ for local variables.
+#+attr_latex: :float t
+#+begin_src agda
+data Expression     (Σ : Vec Type o) (Γ : Vec Type n) : Type → Set
+data Reference      (Σ : Vec Type o) (Γ : Vec Type n) : Type → Set
+data LocalReference (Σ : Vec Type o) (Γ : Vec Type n) : Type → Set
+data Statement      (Σ : Vec Type o) (Γ : Vec Type n) : Set
+data LocalStatement (Σ : Vec Type o) (Γ : Vec Type n) : Set
+data Function       (Σ : Vec Type o) (Γ : Vec Type n) (ret : Type) : Set
+data Procedure      (Σ : Vec Type o) (Γ : Vec Type n) : Set
+#+end_src
+
+[[AMPSL-expr-prototypes]] lists the prototypes for the various AMPSL program
+elements, with the full definitions being given in [[*AMPSL Syntax Definition]].
+Each of the AMPSL program element types are parameterised by two variable
+contexts: Σ for global variables and Γ for local variables. The two variable
+contexts are split to simplify the types for function calls and procedure
+invocations. As the set of global variables does not change across a program,
+functions and procedures keep the same value of parameter Σ in their types. As
+functions and procedures have different local variables than the calling
+context, having the local variable context as a separate parameter makes the
+change simple.
+
+An ~Expression~ in AMPSL corresponds with expressions in the pseudocode. Many
+operators are identical to those in the pseudocode (like ~+~, ~*~, ~-~), and
+others are simple renamings (like ~≟~ instead of ~==~ for equality comparisons).
+Unlike the pseudocode, where literals can appear unqualified, AMPSL literals
+are introduced by the ~lit~ constructor.
+
+The most immediate change for programming in AMPSL versus the pseudocode is how
+variables are handled. Because the ~Expression~ type carries fixed-length
+vectors listing the AMPSL types of variables, a variable is referred to by its
+index into the context. For example, a variable context \(\{x \mapsto
+\mathrm{int}, y \mapsto \mathrm{real}\}\) is represented in AMPSL as the context
+~int ∷ real ∷ []~. The variable \(x\) is then represented by ~var 0F~ in AMPSL.
+Because the global and local variable contexts are disjoint for the ~Expression~
+type, variables are constructed using ~state~ or ~var~ respectively.
+
+Whilst this decision introduces much complexity to programming using AMPSL, it
+greatly simplifies the language for use in constructing proofs. It is also a
+technique used in the internal representation of many compilers (FIXME: cite).
+
+AMPSL expressions also add a number of useful constructs to the pseudocode type.
+One such pair is ~[_]~ and ~unbox~, which construct and destruct an array of
+length one respectively. Others are ~fin~, which allows for arbitrary
+computations on elements of finite sets, and ~asInt~, which converts a finite
+value into an integer.
+
+The final three AMPSL operators of note are ~merge~, ~slice~ and ~cut~. These
+all perform operations on arrays, by either merging two together, taking out a
+slice, or cutting out a slice. Unlike the pseudocode where bitstring slicing
+requires a range, these three operators use Agda's dependent types and type
+inference so that only a base offset is necessary.
+
+~slice xs i~, like bitstring slicing, extracts a contiguous subset of values
+from an array ~xs~, such that the first element in ~slice xs i~ is in ~xs~ at
+position ~i~. ~cut xs i~ returns the remainder of ~slice xs i~; the two ends of
+~xs~ not in the slice, concatenated. Finally, ~merge xs ys i~ joins ~xs~ and
+~ys~ to form a product-projection triple.
+
+The ~Reference~ type is the name AMPSL gives to assignable expressions from the
+pseudocode. The ~LocalReference~ type is identical to ~Reference~, except it
+does not include global variables. Due to complications to the semantics of
+multiple assignments to one location, "product" operations like ~merge~ and
+~cons~ are excluded from being references, despite concatenated bitstrings and
+tuples being assignable expressions in the pseudocode. Whilst (FIXME: textcite)
+requires that no position in a bitstring is referenced twice, enforcing this in
+AMPSL for ~merge~ and ~cons~ would make their use unergonomic in practice for
+writing code or proofs.
+
+(FIXME: necessary?) In an earlier form of AMPSL, instead of separate types for
+assignable expressions which can and cannot assign to state, there were two
+predicates. However, this required carrying around a proof that the predicate
+holds with each assignment. Whilst the impacts on performance were unmeasured,
+it made proving statements with assignable expressions significantly more
+difficult. Thankfully, Agda is able to resolve overloaded data type constructors
+without much difficulty, meaning the use of ~Reference~ and ~LocalReference~ in
+AMPSL programs is transparent.
+
+**** Example AMPSL Expressions
+One arithmetic operator used in the pseudocode is left shift. (FIXME: textcite)
+explains how this can be encoded using other arithmetic operators in AMPSL, as
+shown below:
+
+#+begin_src agda2
+_<<_ : Expression Σ Γ int → (n : ℕ) → Expression Σ Γ int
+e << n = e * lit (ℤ.+ (2 ℕ.^ n))
+#+end_src
+
+This simple-looking expression has a lot of hidden complexity. First, consider
+the type of the literal statement. The unary plus operation tells us that the
+literal is an Agda integer. However, there are two AMPSL types with Agda
+integers for literal values: ~int~ and ~real~. How does Agda correctly infer the
+type? Recall that multiplication is polymorphic in AMPSL, with the result type
+determined by implicit coercion. Agda knows that the multiplication must return
+an ~int~, and that the first argument is also an ~int~, so it can infer that the
+second multiplicand is an integer literal.
+
+Another pseudocode operation not yet described in AMPSL is integer slicing. Here
+is an expression that slices a single bit from an integer, following the
+procedure by [cite/t:@arm/DDI0553B.s §E1.3.3]:
+
+#+begin_src agda2
+getBit : ℕ → Expression Σ Γ int → Expression Σ Γ bit
+getBit i x =
+  inv (x - ((x >> suc i) << suc i) <? lit (ℤ.+ (2 ℕ.^ i)))
+#+end_src
+
+This makes use of AMPSL unifying the ~bit~ and ~bool~ types. The left-side of
+the inequality finds the residual of ~x~ modulo \(2 ^ {i+1}\).  Note that
+right-shift is defined to always round values down hence the modulus is always
+positive. If the modulus is less than \(2^i\), then the bit in the two's
+complement representation of ~x~ is ~0~, otherwise it is ~1~.
+
+*** AMPSL Statements
+Most of the statements that are present in AMPSL are unsurprising. The ~skip~
+and sequencing (~_∙_~) statements should be familiar from the discussion on
+Hoare logic, the assignment statement (~_≔_~) assigns a value into a reference,
+the ~invoke~ statement calls a procedure and the ~if_then_else_~ statement
+starts a conditional block.
+
+Given that AMPSL has a ~skip~ statement and an ~if_then_else_~ control-flow
+structure, including the ~if_then_~ statement may appear redundant. Ultimately,
+the statement is redundant. It is regardless included in AMPSL for two reasons.
+The first is ergonomics. ~if_then_~ statements appear many times more often in
+the pseudocode than ~if_then_else_~ statements such that omitting it would only
+serve to complicate the code. The other reason is that including an ~if_then_~
+statement makes the behaviour of a number of functions that manipulate AMPSL
+code much easier to reason about.
+
+The form of variable declarations is significantly different in AMPSL than it is
+in the pseudocode. As variables in AMPSL are accessed by index into the variable
+context instead of by name, AMPSL variable declarations do not need a name. In
+addition, Agda can often infer the type of a declared variable from the context
+in which it is used, making type annotations unnecessary. The last and most
+significant difference is that all variables in AMPSL must be initialised. This
+simplifies the semantics of AMPSL greatly, and prevents the use of uninitialised
+variables.
+
+AMPSL makes a small modification to ~for~ loops that greatly improve the type
+safety over what is achieved by the pseudocode. Instead of looping over a range
+of dynamic values [cite:@arm/DDI0553B.s §E1.4.4], AMPSL loops perform a static
+number of iterations, determined by an Agda natural ~n~. Then, instead of the
+loop variable being an assignable integer expression, AMPSL introduces a new
+variable with type ~fin n~.
+
+There are three statement forms from the pseudocode that AMPSL omits. These are
+~while...do~ loops, ~repeat...until~ loops and ~try...catch~ exception handling.
+Including these three statements would greatly complicate the denotational
+encoding of AMPSL, by removing termination guarantees and requiring a monadic
+transformation for the loops and exceptions, respectively.
+
+Thankfully, these three structures are not a vital part of the pseudocode, each
+either having a functional alternative [cite:@arm/DDI0553B.s §E2.1.166] or
+forming part of internal processor bookkeeping [cite:@arm/DDI0553B.s §E2.1.397],
+[cite:@arm/DDI0553B.s §E2.1.366]. Hence their omission from AMPSL is not a
+significant loss.
+
+AMPSL has a ~LocalStatement~ type as well as a ~Statement~ type. Whilst
+~Statement~ can assign values into any ~Reference~, a ~LocalStatement~ can only
+assign values into a ~LocalReference~. This means that ~LocalStatement~ cannot
+modify global state, only local state.
+
+**** Example AMPSL Statements
+Here is a statement that copies elements from ~y~ into ~x~ if the corresponding
+entry in ~mask~ is true:
+
+#+begin_src agda2
+copy : Statement Σ (array t n ∷ array t n ∷ array bool n ∷ [])
+copy =
+  for n (
+    let i = var 0F in
+    let x = var 1F in
+    let y = var 2F in
+    let mask = var 3F in
+
+    if index mask i ≟ true
+    then
+        *index x i ≔ index y i
+  )
+#+end_src
+
+This uses Agda functions ~index~ and ~*index~ to apply the appropriate slices,
+casts and unboxing to extract an element from an array expression and reference,
+respectively. One thing of note is the use of ~let...in~ to give variables
+meaningful names. This is a stylistic choice that works well in this case.
+Unfortunately, if the ~if_then_~ statement declared a new variable, these naming
+variables would become useless, as the types would be different. For example
+consider the following snippet:
+
+#+begin_src agda2
+VPTAdvance : Statement State (beat ∷ [])
+VPTAdvance =
+  declare (fin div2 (tup (var 0F ∷ []))) (
+  declare (elem 4 (! VPR-mask) (var 0F)) (
+    let vptState = var 0F in
+    let maskId = var 1F in
+    let beat = var 2F in
+
+    if ! vptState ≟ lit (true ∷ false ∷ false ∷ false ∷ [])
+    then
+      vptState ≔ lit (Vec.replicate false)
+    else if inv (! vptState ≟ lit (Vec.replicate false))
+    then (
+      declare (lit false) (
+        let i = var 0F in
+        let vptState = var 1F in
+        -- let mask = var 2F in
+        let beat = var 3F in
+
+        cons vptState (cons i nil) ≔ call (LSL-C 0) (! vptState ∷ []) ∙
+        if ! i
+        then
+          *elem 4 VPR-P0 beat ≔ not (elem 4 (! VPR-P0) beat))) ∙
+    if getBit 0 (asInt beat)
+    then
+      *elem 4 VPR-mask maskId ≔ ! vptState))
+#+end_src
+
+This corresponds to the ~VPTAdvance~ procedure by [cite/t:@arm/DDI0553B.s
+§E2.1.424] (FIXME: why?). Notice how every time a new variable is introduced,
+the variable names have to be restated. Whilst this is a barrier when trying to
+write programs in AMPSL, the type-safety guarantees and simplified proofs over
+using named variables more than make up the difference.
+
+*** AMPSL Functions and Procedures
+Much like how a procedure in the pseudocode is a wrapper around a block of
+statements, ~Procedure~ in AMPSL is a wrapper around ~Statement~. Note that
+AMPSL procedures only have one exit point, the end of a statement, unlike the
+pseudocode which has ~return~ statements. Any procedure using a ~return~
+statement can be transformed into one that does not by a simple refactoring, so
+AMPSL does not lose any expressive power over the pseudocode.
+
+AMPSL functions are more complex than procedures. A function consists of a pair
+of an ~Expression~ and ~LocalStatement~. The statement has the function
+arguments and the return value as local variables, where the return value is
+initialised to the result of the expression. The return value of the function is
+then the final value of the return variable.
+
+**** Example AMPSL Functions and Procedures
+As ~Procedure~ is almost an alias for ~Statement~, examples of procedures can be
+found in [[*Example AMPSL Statements]]. This is a simple function that converts a
+bitstring to an unsigned or signed integer, depending on whether the second
+argument is true or false:
+
+#+begin_src agda2
+Int : Function State (bits n ∷ bool ∷ []) int
+Int =
+  init
+    if var 1F
+    then uint (var 0F)
+    else sint (var 0F) ∙
+    skip
+  end
+#+end_src
+
+The function body is the ~skip~ statement, meaning that whatever is initially
+assigned to the return variable is the result of calling the function. The
+initial value of the return variable is a simple conditional statement, calling
+~uint~ or ~sint~ on the first argument as appropriate. Many functions that are
+easy to inline have this form.
+
+(FIXME: make uint an example)
+# The ~GetCurInstBeat~ function by [cite/t:@arm/DDI0553B.s §E2.1.185] is one
+# function that benefits from the unusual representation of functions. A
+# simplified AMPSL version is given below.
+
+# #+begin_src agda2
+# GetCurInstrBeat : Function State [] (tuple (beat ∷ elmtMask ∷ []))
+# GetCurInstrBeat =
+#   init
+#     tup (! BeatId ∷ lit (Vec.replicate true) ∷ []) ∙ (
+#       let outA = head (var 0F) in
+#       let outB = head (tail (var 0F)) in
+#       if call VPTActive (! BeatId ∷ [])
+#       then
+#         outB ≔ !! outB and elem 4 (! VPR-P0) outA
+#     )
+#   end
+# #+end_src
+
+# The function initialises a default return value, and then modifies it based on
+# the current state of execution. This is easy to encode in the AMPSL function
+# syntax. The return variable is initialised to the default value, and the
+# function body performs the necessary manipulations.
+
+In this way a function is much like a ~declare~ statement. However, instead of
+discarding the declared variable when it leaves scope, a function returns it to
+the caller.
 
 ** AMPSL Semantics
+So far we have discussed the syntactic form of AMPSL, showing how it is similar
+to the Arm pseudocode. We have also given a brief high-level semantics of AMPSL.
+Formal verification requires a much more detailed description of the semantics
+than what has been given so far.
+
+This section starts with a brief discussion of how to model AMPSL types. This
+addresses the burning question of how to model real numbers in Agda.  From this,
+we discuss the denotational semantics of AMPSL, and how AMPSL program elements
+can be converted into a number of different Agda function types. The section
+ends with a presentation of a Hoare logic for AMPSL, allowing for efficient
+syntax-directed proofs of statements.
+
+*** AMPSL Datatype Models
+#+name: AMPSL-type-models
+#+caption: The semantic encoding of AMPSL data types. The use of ~Lift~ is to
+#+caption: ensure all the encodings occupy the same Agda universe level.
+#+begin_src agda2
+⟦_⟧ₜ  : Type → Set ℓ
+⟦_⟧ₜₛ : Vec Type n → Set ℓ
+
+⟦ bool ⟧ₜ      = Lift ℓ Bool
+⟦ int ⟧ₜ       = Lift ℓ ℤ
+⟦ fin n ⟧ₜ     = Lift ℓ (Fin n)
+⟦ real ⟧ₜ      = Lift ℓ ℝ
+⟦ tuple ts ⟧ₜ  = ⟦ ts ⟧ₜₛ
+⟦ array t n ⟧ₜ = Vec ⟦ t ⟧ₜ n
+
+⟦ [] ⟧ₜₛ          = Lift ℓ ⊤
+⟦ t ∷ [] ⟧ₜₛ      = ⟦ t ⟧ₜ
+⟦ t ∷ t₁ ∷ ts ⟧ₜₛ = ⟦ t ⟧ₜ × ⟦ t₁ ∷ ts ⟧ₜₛ
+#+end_src
+
+To be able to write a denotational semantics for a language, the first step is
+to find a suitable encoding for the data types. In this case, we have to be able
+to find encodings of AMPSL types within Agda. [[AMPSL-type-models]] shows the full
+encoding function. Most of the choices are fairly trivial: Agda Booleans for
+~bool~, Agda vectors for ~array t n~ and the Agda finite set type ~Fin n~ for
+the AMPSL type ~fin n~.
+
+# RESOLVED: bit is an alias for bool.
+# In this encoding, ~bool~ and ~bit~ are both represented by Agda Booleans. This
+# again begs the question of why they are distinct types in AMPSL and are not
+# unified into one. The philosophical reasoning used by (FIXME: textcite) is now
+# diluted; ~array~ is used for abstract arrays and physical bitstrings. (FIXME:
+# why are they distinct?)
+
+Tuples are the next simplest type, being encoded as an n-ary product. This is
+the action of the ~⟦_⟧ₜₛ~ function in [[AMPSL-type-models]]. Unfortunately the Agda
+standard library does not have a dependent n-ary product type. In any case, the
+Agda type checker would not accept its usage in this case due to termination
+checking, hence the manual inductive definition.
+
+(ALTERNATIVE 1: ~int~ stays as abstract discrete ordered commutative ring)
+
+The other two AMPSL types are ~int~, ~real~. Whilst ~int~ could feasibly be
+encoded by the Agda integer type, there is no useful Agda encoding for
+mathematical real numbers. Because of this, both numeric types are represented
+by abstract types with the appropriate properties. ~int~ is represented by a
+discrete ordered commutative ring ℤ and ~real~ by a field ℝ. We also require
+that there is a split ring monomorphism \(\mathtt{/1} : ℤ \to ℝ\) with
+retraction \(\mathtt{⌊\_⌋} : ℝ \to ℤ\). \(\mathtt{⌊\_⌋}\) may not be a ring
+homomorphism, but it must preserve \(\le\) ordering and satisfy the floor
+property:
+
+\[
+\forall x y. x < y \mathtt{/1} \implies ⌊ x ⌋ < y
+\]
+
+(ALTERNATIVE 2: ~real~ becomes rational.)
+
+The other two AMPSL types are ~int~ and ~real~. ~int~ is encoded by the Agda
+integer type. However, there is no useful Agda encoding for mathematical real
+numbers. This can be approximated using the Agda rational type ℚ. Whilst this
+clearly cannot encode all real numbers, it satisfies nearly all of the
+properties required by the pseudocode real-number type. The only missing
+operation is square-root, which is unnecessary for the proofs AMPSL is designed
+for.
+
+(END ALTERNATIVES)
+
+*** Denotational Semantics
+
+#+name: AMPSL-denotational-prototypes
+#+caption: Function prototypes for the denotational semantics of different AMPSL
+#+caption: program elements. All of them become functions from the current
+#+caption: variable context into some return value.
+#+begin_src agda2
+expr      : Expression Σ Γ t        → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ t ⟧ₜ
+exprs     : All (Expression Σ Γ) ts → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ ts ⟧ₜₛ
+ref       : Reference Σ Γ t         → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ t ⟧ₜ
+locRef    : LocalReference Σ Γ t    → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ t ⟧ₜ
+stmt      : Statement Σ Γ           → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ
+locStmt   : LocalStatement Σ Γ      → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ
+fun       : Function Σ Γ t          → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ t ⟧ₜ
+proc      : Procedure Σ Γ           → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Σ ⟧ₜₛ
+#+end_src
+
+The denotational semantics has to represent the different AMPSL program elements
+as mathematical objects. In this case, due to careful design of AMPSL's syntax,
+each of the elements is represented by a total function.
+[[AMPSL-denotational-prototypes]] shows the prototypes of the different semantic
+interpretation functions, and the full definition is in [[*AMPSL Denotational
+Semantics]]. Each function accepts the current variable context as an argument.
+Because the variable contexts are an ordered sequence of values of different
+types, they can be encoded in the same way as tuples.
+
+**** Expression Semantics
+
+The semantic representation of an expression converts the current variable
+context into a value with the same type as the expression. Most cases are pretty
+simple. For example, addition is the sum of the values of the two subexpressions
+computed recursively. One of the more interesting cases are global and local
+variables, albeit this is only a lookup in the variable context for the current
+value. This lookup is guaranteed to be safe due to variables being a lookup into
+the current context. Despite both being a subsets of the ~Expression~ type,
+~Reference~ and ~LocalReference~ require their own functions to satisfy the
+demands of the termination checker.
+
+One significant omission from this definition is the checking of evaluation
+order. Due to the design choices that AMPSL functions cannot modify global state,
+and that no AMPSL expression can modify state, expressions have the same value
+no matter the order of evaluation for sub-expressions. This is also reflected in
+the type of the denotational representation of expressions. It can only possibly
+return a value and not a modified version of the state.
+
+**** Assignment Semantics
+#+name: AMPSL-denotational-assign-prototypes
+#+caption: Function prototypes for the ~assign~ and ~locAssign~ helper
+#+caption: functions. The arguments are the reference, new value, original
+#+caption: variable context and the context to update. The original context is
+#+caption: needed to evaluate expressions within the reference.
+#+begin_src agda2
+assign    : Reference Σ Γ t      → ⟦ t ⟧ₜ → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ
+locAssign : LocalReference Σ Γ t → ⟦ t ⟧ₜ → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ
+#+end_src
+
+Before considering statements as a whole, we start with assignment statements.
+If assignments were only into variables, this would be a trivial update to the
+relevant part of the context. However, the use of ~Reference~ makes things more
+tricky. Broadly speaking, there are three types of ~Reference~: terminal
+references like ~state~ and ~var~; isomorphism operations like ~unbox~, ~[_]~
+and ~cast~; and projection operations like ~slice~, ~cut~, ~head~ and ~tail~.
+
+We will consider how to update each of the three types of references in turn,
+which is the action performed by helper functions ~assign~ and ~locAssign~, the
+signatures of which are given in [[AMPSL-denotational-assign-prototypes]].
+
+Terminal references are the base case and easy. Assigning into ~state~ and ~var~
+updates the relevant part of the variable context. Isomorphic reference
+operations are also relatively simple to assign into. First, transform the
+argument using the inverse operation, and assign that into the sub-reference.
+For example, the assignment ~[ ref ] ≔ v~ is the same as ~ref ≔ unbox v~.
+
+The final type of reference to consider are the projection reference operations.
+Assigning into one projection of a reference means that the other part remains
+unchanged. Consider the assignment ~head r ≔ v~ as an example. This is
+equivalent to ~r ≔ cons v (tail r)~, which makes it clear that the second
+projection remains constant. The second projection must be computed using the
+original variable context, which is achieved by only updating the context for a
+leaf reference.
+
+This interpretation of slice as a projection reference type is a large part of
+the reason why AMPSL has ~merge~, ~cut~ and ~slice~ instead of the bitstring
+concatenation and slicing present in the pseudocode. There is no way to form a
+product-projection triple with only bitstring joining and slicing, so any
+denotational semantics with these operations would require merge and cut
+operations on the encoding of values.  AMPSL takes these semantic necessities
+and makes them available to programmers.
+
+~assign~ and ~locAssign~, when given a reference and initial context, return the
+full and local variable contexts respectively. As ~Reference~ includes both
+~state~ and ~var~, assigning into a reference can modify both global and local
+references. In contrast, ~LocalReference~ only features ~var~, so can only
+modify local variables.
+
+**** Statement Semantics
+Compared to assignment, the semantics of other statements are trivial to
+compute. Skip statements map to the identity function and sequencing is function
+composition, reflecting that they do nothing and compose statements together
+respectively. As expressions cannot modify state, ~if_then_else_~ and ~if_then_~
+statements become simple---evaluate the condition and both branches on the input
+state, and return the branch depending on the value of the condition. Local
+variable declarations are also quite simple. The initial value is computed and
+added to the variable context. After evaluating the subsequent statement, the
+final value of the new variable is stripped away from the context.
+
+The only looping construct in AMPSL is the ~for~ loop. Because it performs a
+fixed number of iterations, it too has easy-to-implement denotational semantics.
+This is because it is effectively a fixed number of ~declare~ statements all
+sequenced together. This is also one of the primary reasons why the denotational
+semantics can have poor computational performance; every iteration of the ~for~
+loop must be evaluated individually.
+
+~stmt~ and ~locStmt~ return the full context and only the local variables
+respectively. This is because only ~Statement~ can include ~Reference~ which can
+reference global state. On the other hand, ~LocalReference~ used by
+~LocalStatement~ can only refer to, and hence modify, local state.
+
+**** Function and Procedure Semantics
+Finally there are ~proc~ and ~fun~ for denoting procedures and functions. ~proc~
+returns the global state only. ~Procedure~ is a thin wrapper around ~Statement~,
+which modifies both local and global state. However, the local state is lost
+when leaving a procedure, hence ~proc~ only returns the global part.
+
+~fun~ behaves a lot like a ~declare~ statement. It initialises the return
+variable to the given expression, then evaluates the ~LocalStatement~ body.
+Unlike ~declare~, which discards the added variable upon exiting the statement,
+~fun~ instead returns the value of that variable. As ~LocalStatement~ cannot
+modify global state, and the other local variables are lost upon exiting the
+function, only this one return value is necessary.
+
+*** Hoare Logic Semantics
+The final form of semantics specified for AMPSL is a form of Hoare logic. Unlike
+the denotational semantics, which must perform a full computation, the Hoare
+logic is syntax-directed; loops only require a single proof. This section starts
+by explaining how a AMPSL ~Expression~ is converted into a ~Term~ for use in
+Hoare logic assertions. Then the syntax and semantics of the ~Assertion~ type is
+discussed before finally giving the form of correctness triples for AMPSL.
+
+**** Converting ~Expression~ into ~Term~
+As discussed in [[*Hoare Logic]], a simple language such as WHILE can use
+expressions as terms in assertions directly. The only modification required is
+the addition of auxiliary variables. AMPSL is not as simple a language as WHILE,
+thanks to the presence of function calls in expressions. Whilst function calls
+do not prevent converting expressions into terms, some care must be taken. In
+particular, this conversion is only possible due to the pure nature of AMPSL
+functions; it would not be possible if functions modified global variables. The
+full definition of ~Term~ and its semantics are given in [[*AMPSL Hoare Logic
+Definitions]].
+
+First, a demonstration on why function calls need special care in Hoare logic.
+We will work in an environment with a single Boolean-valued global variable.
+Consider the following AMPSL function, a unary operator on an integer, which is
+the identity when ~state 0F~ is false and otherwise performs an increment.
+
+#+begin_src agda2
+f : Function [ bool ] [ int ] int
+f =
+  init
+    var 0F ∙
+    let x = var 1F in
+    let ret = var 0F in
+    if state 0F
+      then ret ≔ lit 1ℤ + x
+  end
+#+end_src
+
+Consider the expression ~e = call f [ x ]~ of type ~Expression [ bool ] Γ int~.
+There are three important aspects we need to consider for converting ~e~ into a
+term: the initial conversion; substitution of variables; and the semantics.
+(FIXME: why?)
+
+The simplest conversion is to keep the function call as-is, and simply
+recursively convert ~x~ into a term. This would result in a term ~e′ = call f [
+x′ ]~, using ~′~ to indicate this term embedding function.
+
+What would happen when we try and substitute ~state 0F~ for ~t~, a term
+involving local variables in ~Γ~, into ~e′~? As ~f~ refers to ~state 0F~, it
+must be modified in some way. However, ~Γ~ is a different variable context from
+~[ int ]~, so there is no way of writing ~t~ inside of ~f~. This embedding is
+not sufficient.
+
+A working solution comes from the insight that a ~Function~ in AMPSL can only
+read from global variables, and never write to them. Instead of thinking of ~f~
+as a function with a set of global variables and a list of arguments, you can
+consider ~f~ to be a function with two sets of arguments. In an ~Expression~,
+the first set of arguments always corresponds exactly with the global variables,
+so is elided. We can then define an embedding function ~↓_~, such that ~↓ e =
+call f [ state 0F ] [ ↓ x ]~, and all the other expression forms as expected.
+This makes the elided arguments to ~f~ explicit.
+
+Doing a substitution on ~↓ e~ is now simple: perform the substitution on both
+sets of arguments recursively, and leave ~f~ unchanged. As the first set of
+arguments correspond exactly to the global variables in ~f~, the substitution
+into those arguments appears like a substitution into ~f~ itself.
+
+The last major consideration of this embedding is how to encode its semantics.
+To be able to perform logical implications within Hoare logic, it is necessary
+to have a semantic interpretation for assertions and thus terms. Going back to
+~↓ e~, we already have a denotational semantics for ~f~. Hence we only need to
+consider the global and local variables we pass to ~f~ to get the value. We
+simply pass ~f~ the values of the global and local argument lists for the values
+of the global and local arguments respectively. Thus ~↓ e~ is a valid conversion
+from ~Expression~ to ~Term~.
+
+The only other difference between ~Expression~ and ~Term~ is the use of
+auxiliary variables within Hoare logic terms. AMPSL accomplishes this by
+providing a ~meta~ constructor much like ~state~ and ~var~. This indexes into a
+new auxiliary variable context, Δ, which forms part of the type definition of
+~Term~.
+
+**** Hoare Logic Assertions
+An important part of Hoare logic is the assertion language used within the
+correctness triples. The Hoare logic for AMPSL uses a first-order logic, which
+allows for the easy proof of many logical implications at the expense of not
+being complete over the full set of state properties. The full definition and
+semantics of the ~Assertion~ type are in [[*AMPSL Hoare Logic Definitions]].
+
+The ~Assertion~ type has the usual set of Boolean connectives: ~true~, ~false~,
+~_∧_~, ~_∨_~, ~¬_~ and ~_→_~. When compared to the ~fin~ AMPSL expression, which
+performs arbitrary manipulations on finite sets, using this fixed set of
+connectives may appear restrictive. The primary reason in favour of a fixed set
+of connectives is that the properties are well-defined. This makes it possible
+to prove properties about the ~Assertion~ type within proofs that would not be
+possible if assertions could use arbitrary connectives.
+
+Another constructor of ~Assertion~ is ~pred~, which accepts an arbitrary
+Boolean-valued ~Term~. This is the only way to test properties of the current
+program state within assertions. As nearly all types have equality comparisons,
+~pred~ can encode equality and inequality constraints on values. Furthermore, as
+~Term~ embeds ~Expression~, many complex computations can be performed within
+~pred~. To allow equality between two terms of any type, there is an ~equal~
+function to construct an appropriate assertion.
+
+The final two constructors of ~Assertion~ provide first-order quantification
+over auxiliary variables. ~all~ provides universal quantification and ~some~
+provides existential quantification.
+
+Semantically, an assertion is a predicate on the current state of execution. For
+AMPSL, this state is the current global, local and auxiliary variable contexts.
+As is usual in Agda, the predicates are encoded as an indexed family of sets.
+
+The Boolean connectives are represented by their usual type-theoretic
+counterparts: the unit type for ~true~, the empty type for ~false~, product
+types for ~_∧_~, sum types for ~_∨_~, function types for ~_→_~ and the negation
+type for ~¬_~.
+
+Quantifier assertions are also quite easy to give a semantic representation. For
+universal quantification, you have a function taking values of the type of the
+auxiliary variable, which returns the encoding of the inner assertion with
+auxiliary context extended by this value. For existential quantification, you
+instead have a dependent pair of a value with the auxiliary variable type, and
+semantic encoding of the inner assertion.
+
+The final ~Assertion~ form to consider is ~pred~. This first evaluates the
+associated Boolean term. If true, the semantics returns the unit type.
+Otherwise, it returns the empty type.
+
+(FIXME: necessary?)
+For a language where value equality can
+have many different values, some readers may feel like reducing those equalities
+to a binary result loses information. Providing this information to the user
+would require a way to convert Boolean-valued terms into a normal form,
+with an inequality operator at the root. This conversion would be highly
+non-trivial, especially due to the presence of function calls in terms.
+
+Fortunately, all equalities and inequalities between AMPSL values are decidable,
+either by construction of the type for Booleans and finite sets, or by
+specification for integers and real numbers. This allows the user to extract
+Agda terms for equalities given only knowledge of whether terms are equal.
+
+**** Correctness Triples for AMPSL
+In the traditional presentation of Hoare logic ([[*Hoare Logic]]), there are two
+types of rule; structural rules based on program syntax and adaptation rules to
+modify preconditions and postconditions. The Hoare logic for AMPSL unifies the
+two forms of rules, eliminating the need to choose which type of rule to use
+next. This allows for purely syntax-directed proofs for any choice of
+precondition and postcondition.
+
+#+name: AMPSL-correctness-triples
+#+caption: The Hoare logic correctness triples for AMPSL. This combines the
+#+caption: structural and adaptation rules you would find in traditional
+#+caption: renderings of Hoare logic into a single set of structural rules.
+#+begin_src agda2
+data HoareTriple (P : Assertion Σ Γ Δ) (Q : Assertion Σ Γ Δ) :
+                 Statement Σ Γ → Set (ℓsuc ℓ) where
+  seq     : ∀ R → HoareTriple P R s → HoareTriple R Q s₁ → HoareTriple P Q (s ∙ s₁)
+  skip    : P ⊆ Q → HoareTriple P Q skip
+  assign  : P ⊆ subst Q ref (↓ val) → HoareTriple P Q (ref ≔ val)
+  declare : HoareTriple
+              (Var.weaken 0F P ∧ equal (var 0F) (Term.Var.weaken 0F (↓ e)))
+              (Var.weaken 0F Q)
+              s →
+            HoareTriple P Q (declare e s)
+  invoke  : let metas = All.map (Term.Meta.inject Δ) (All.tabulate meta) in
+            let varsToMetas = λ P → Var.elimAll (Meta.weakenAll [] Γ P) metas in
+            let termVarsToMetas =
+              λ t → Term.Var.elimAll (Term.Meta.weakenAll [] Γ t) metas in
+            HoareTriple
+              ( varsToMetas P
+              ∧ equal (↓ tup (All.tabulate var)) (termVarsToMetas (↓ tup es))
+              )
+              (varsToMetas Q)
+              s →
+            HoareTriple P Q (invoke (s ∙end) es)
+  if      : HoareTriple (P ∧ pred (↓ e)) Q s →
+            P ∧ pred (↓ inv e) ⊆ Q →
+            HoareTriple P Q (if e then s)
+  if-else : HoareTriple (P ∧ pred (↓ e)) Q s →
+            HoareTriple (P ∧ pred (↓ inv e)) Q s₁ →
+            HoareTriple P Q (if e then s else s₁)
+  for     : (I : Assertion _ _ (fin _ ∷ _)) →
+            P ⊆ Meta.elim 0F I (↓ lit 0F) →
+            HoareTriple {Δ = _ ∷ Δ}
+              ( Var.weaken 0F
+                  (Meta.elim 1F (Meta.weaken 0F I)
+                                (fin inject₁ (cons (meta 0F) nil)))
+              ∧ equal (meta 0F) (var 0F)
+              )
+              (Var.weaken 0F
+                 (Meta.elim 1F (Meta.weaken 0F I)
+                               (fin suc (cons (meta 0F) nil))))
+              s →
+            Meta.elim 0F I (↓ lit (fromℕ m)) ⊆ Q →
+            HoareTriple P Q (for m s)
+#+end_src
+
+We will now talk through each of the Hoare logic rules for AMPSL, which are
+given in [[AMPSL-correctness-triples]]. The simplest rule to consider is ~skip~.
+This immediately demonstrates how AMPSL Hoare logic combines structural and
+adaptation rules. A purely structural rule for ~skip~ would be ~HoareTriple P P
+skip~; the ~skip~ statement has no effect on the current state. By combining
+this with the rule of consequence, a ~skip~ statement allows for logical
+implication.
+
+The ~seq~ rule is as you would expect and mirrors the SEQ rule of WHILE's Hoare
+logic. The only potential surprise is that the intermediate assertion has to be
+given explicitly. This is due to Agda being unable to infer the assertion ~Q~
+from the numerous manipulations applied to it by the other correctness rules.
+
+Another pair of simple rules are ~if~ and ~if-else~. In fact, the ~if-else~ rule
+is identical to the corresponding Hoare logic rule from WHILE, and ~if~ only
+differs by directly substituting in a ~skip~ statement for the negative branch.
+
+The final trivial rule is ~assign~. Like the ~skip~ rule, the ~assign~ rule
+combines the structural and adaptation rules of WHILE into a single Hoare logic
+rule for AMPSL. A purely structural rule would have ~subst Q ref (↓ val)~ as the
+precondition of the statement. AMPSL combines this with the rule of consequence
+to allow for an arbitrary precondition.
+
+The other Hoare logic rules for AMPSL are decidedly less simple. Most of the
+added complexity is a consequence of AMPSL's type safety. For example, whilst it
+is trivial to add a free variable to an assertion on paper, doing so in a
+type-safe way for the ~Assertion~ type requires constructing a whole new Agda
+term, as the variable context forms part of the type.
+
+The ~declare~ rule is the simplest of the three remaining. The goal is to
+describe a necessary triple on ~s~ such that ~HoareTriple P Q (declare e s)~ is
+a valid correctness triple. First, note that ~P~ and ~Q~ have type ~Assertion Σ
+Γ Δ~, whilst ~s~ has type ~Statement Σ (t ∷ Γ)~ due to the declaration
+introducing a new variable. To be able to use ~P~ and ~Q~, they have to be
+weakened to the type ~Assertion Σ (t ∷ Γ) Δ~, achieved by calling ~Var.weaken
+0F~. We will denote the weakened forms ~P′~ and ~Q′~ for brevity. The recursive
+triple we have is ~HoareTriple P′ Q′ s~. However, this does not constrain the
+new variable. Thus we assert that the new variable ~var 0F~ is equal to the
+initial value ~e~.  However, ~e~ has type ~Expression Σ Γ~ and we need a ~Term Σ
+(t ∷ Γ) Δ~. Hence we must instead use ~Term.Var.weaken 0F (↓ e)~, denoted ~e′~ ,
+which converts ~e~ to a term and introduces the new variable. This finally gives
+us the triple we need: ~HoareTriple (P′ ∧ equal (var 0F) e′) Q′ s~.
+
+I will go into less detail whilst discussing ~invoke~ and ~for~, due to an even
+greater level of complexity. The ~for~ rule is the simpler case, so I will start
+there. The form of the ~for~ rule was inspired from the WHILE rule for a ~while~
+loop, but specialised to a form with a fixed number of iterations.
+
+Given a ~for n s~ statement, we first choose a loop invariant ~I : Assertion Σ Γ
+(fin (suc n) ∷ Δ)~. The additional auxiliary variable indicates the number of
+complete iterations of the loop, from \(0\) to \(n\). We will use ~I(x)~ to
+denote the assertion ~I~ with the additional auxiliary variable replaced with
+term ~x~, and make weakening variable contexts implicit. We require that ~P ⊆
+I(0)~ and ~I(n) ⊆ Q~ to ensure that the precondition and postcondition are an
+adaptation of the loop invariant. The final part to consider is the correctness
+triple for ~s~. We add in a new auxiliary variable representing the value of the
+loop variable. This is necessary to ensure the current iteration number is
+preserved between the precondition and postcondition, as the loop variable
+itself can be modified by ~s~. We then require that the following triple holds:
+~HoareTriple (I(meta 0F) ∧ equal (meta 0F) (var 0F)) I(1+ meta 0F) s~. This
+ensures that ~I~ remains true across the loop iteration, for each possible value
+of the loop variable.
+
+Notice that unlike the denotational semantics, which would explicitly execute
+each iteration of a loop, the Hoare logic instead requires only a single proof
+term for all iterations of the loop. This is one of the primary benefits of
+using Hoare logic over the denotational semantics; it has a much lower
+computational cost.
+
+The final Hoare logic rule for AMPSL is ~invoke~. Procedure invocation is tricky
+in AMPSL's Hoare logic due to the changing local variable scope in the procedure
+body. Of particular note, any local variables in the precondition and
+postcondition for a procedure invocation cannot be accessed nor modified by the
+procedure body. This is the inspiration for the form of the ~invoke~ rule.
+
+To construct ~HoareTriple P Q (invoke (s ∙end) es)~, we first consider the form
+~P~ and ~Q~ will take in a correctness triple for ~s~. Note that local variables
+in ~P~ and ~Q~ are immutable within ~s~, due to the changing local variable
+scope. Also note that the local variables cannot be accessed using ~var~; ~P~
+and ~Q~ have type ~Assertion Σ Γ Δ~, but ~s~ has type ~Statement Σ Γ′~ for some
+context ~Γ′~ independent of ~Γ~. As the original local variables are immutable
+during the invocation, we can replace them with auxiliary variables, by
+assigning a new auxiliary variable for each one. Within ~P~ and ~Q~, we then
+replace all ~var x~ with ~meta x~ to reflect that the local variables have been
+moved to auxiliary variables. This is the action performed by the ~varsToMetas~
+function. Finally, we have to ensure that the local variables within the
+procedure body are initially set to the invocation arguments. Like ~P~ and ~Q~,
+the local variables in ~es~ have to be replaced with the corresponding auxiliary
+variables. This substitution is done by ~termVarsToMetas~.
+
+Example uses of these rules, particularly ~invoke~ and ~for~, are given in
+(FIXME: forward reference).
 
 * Properties and Evaluation of AMPSL
 
@@ -680,3 +1567,7 @@ execution. This makes the semantics much simpler to reason about.
 #+latex: %TC:endignore
 
 #  LocalWords:  AMPSL Hoare NTT PQC structs bitstring bitstrings
+
+* AMPSL Syntax Definition
+* AMPSL Denotational Semantics
+* AMPSL Hoare Logic Definitions
