@@ -32,9 +32,10 @@
 #+latex_header: \usepackage{stmaryrd}       % some math characters
 #+latex_header: \usepackage{refcount}       % for counting pages
 #+latex_header: \usepackage{upquote}        % for correct quotation marks in verbatim text
+#+latex_header: \usepackage{caption}        % not sure why this one [[https://www.overleaf.com/learn/latex/How_to_Write_a_Thesis_in_LaTeX_(Part_3)%3A_Figures%2C_Subfigures_and_Tables#Subfigures]]...
+#+latex_header: \usepackage{subcaption}     % add subfigures
 
 #+latex_compiler: pdflatex
-
 
 #+latex_header: \newunicodechar{ʳ}{\ensuremath{^\texttt{r}}}
 #+latex_header: \newunicodechar{ˡ}{\ensuremath{^\texttt{l}}}
@@ -49,8 +50,11 @@
 #+latex_header: \newunicodechar{σ}{\ensuremath{\sigma}}
 #+latex_header: \newunicodechar{ᵗ}{\ensuremath{^\texttt{t}}}
 #+latex_header: \newunicodechar{′}{\ensuremath{'}}
+#+latex_header: \newunicodechar{ⁱ}{\ensuremath{^\texttt{i}}}
+#+latex_header: \newunicodechar{⁺}{\ensuremath{^{+}}}
 #+latex_header: \newunicodechar{₁}{\ensuremath{_1}}
 #+latex_header: \newunicodechar{₂}{\ensuremath{_2}}
+#+latex_header: \newunicodechar{ₚ}{\ensuremath{_\texttt{p}}}
 #+latex_header: \newunicodechar{ₛ}{\ensuremath{_\texttt{s}}}
 #+latex_header: \newunicodechar{ₜ}{\ensuremath{_\texttt{t}}}
 #+latex_header: \newunicodechar{ℓ}{l}
@@ -61,6 +65,7 @@
 #+latex_header: \newunicodechar{⇒}{\ensuremath{\rightarrow}}
 #+latex_header: \newunicodechar{∀}{\ensuremath{\forall}}
 #+latex_header: \newunicodechar{∃}{\ensuremath{\exists}}
+#+latex_header: \newunicodechar{∎}{\ensuremath{\blacksquare}}
 #+latex_header: \newunicodechar{∘}{\ensuremath{\circ}}
 #+latex_header: \newunicodechar{∙}{\ensuremath{\cdot}}
 #+latex_header: \newunicodechar{∧}{\ensuremath{\wedge}}
@@ -75,6 +80,7 @@
 #+latex_header: \newunicodechar{⊆}{\ensuremath{\subseteq}}
 #+latex_header: \newunicodechar{⊎}{\ensuremath{\uplus}}
 #+latex_header: \newunicodechar{⊔}{\ensuremath{\sqcup}}
+#+latex_header: \newunicodechar{⊢}{\ensuremath{\vdash}}
 #+latex_header: \newunicodechar{⊤}{\ensuremath{\top}}
 #+latex_header: \newunicodechar{⊥}{\ensuremath{\bot}}
 #+latex_header: \newunicodechar{⌊}{\ensuremath{\lfloor}}
@@ -909,8 +915,8 @@ Here is a statement that copies elements from ~y~ into ~x~ if the corresponding
 entry in ~mask~ is true:
 
 #+begin_src agda2
-copy : Statement Σ (array t n ∷ array t n ∷ array bool n ∷ [])
-copy =
+copyMasked : Statement Σ (array t n ∷ array t n ∷ array bool n ∷ [])
+copyMasked =
   for n (
     let i = var 0F in
     let x = var 1F in
@@ -1391,7 +1397,7 @@ two forms of rules, eliminating the need to choose which type of rule to use
 next. This allows for purely syntax-directed proofs for any choice of
 precondition and postcondition.
 
-#+name: AMPSL-correctness-triples
+#+name: AMPSL-Hoare-logic
 #+caption: The Hoare logic correctness triples for AMPSL. This combines the
 #+caption: structural and adaptation rules you would find in traditional
 #+caption: renderings of Hoare logic into a single set of structural rules.
@@ -1440,8 +1446,8 @@ data HoareTriple (P : Assertion Σ Γ Δ) (Q : Assertion Σ Γ Δ) :
 #+end_src
 
 We will now talk through each of the Hoare logic rules for AMPSL, which are
-given in [[AMPSL-correctness-triples]]. The simplest rule to consider is ~skip~.
-This immediately demonstrates how AMPSL Hoare logic combines structural and
+given in [[AMPSL-Hoare-logic]]. The simplest rule to consider is ~skip~.  This
+immediately demonstrates how AMPSL Hoare logic combines structural and
 adaptation rules. A purely structural rule for ~skip~ would be ~HoareTriple P P
 skip~; the ~skip~ statement has no effect on the current state. By combining
 this with the rule of consequence, a ~skip~ statement allows for logical
@@ -1552,9 +1558,18 @@ to prove a more general statement.
 ** Soundness of AMPSL's Hoare Logic
 
 #+name: AMPSL-soundness-statement
-#+caption: The Adga statement defining what is meant by AMPSL's logic being sound.
+#+caption: The Adga type defining soundness of AMPSL's Hoare Logic. If there is
+#+caption: a correctness triple \(\{P\}\;\texttt{s}\;\{Q\}\) then for any
+#+caption: variable contexts σ, γ and δ, a proof that \(P\) holds initially
+#+caption: implies that \(Q\) holds after executing \texttt{s} on the global and
+#+caption: local variable contexts.
 #+begin_src agda2
-FIXME: TODO
+sound : P ⊢ s ⊢ Q →
+        ∀ σ γ δ →
+        Assertion.⟦ P ⟧ σ γ δ →
+        uncurry Assertion.⟦ Q ⟧
+          (Semantics.stmt s (σ , γ))
+          δ
 #+end_src
 
 To prove that AMPSL's Hoare logic is sound, we first need to define what is
@@ -1589,52 +1604,118 @@ semantics of terms and assertions before discussing how soundness is shown for
 these more complex Hoare logic rules.
 
 *** Proving Properties of Term and Assertion Manipulations
-(FIXME: x) out of (FIXME: y) of AMPSL's Hoare logic rules require manipulating
-the form of terms and assertions to introduce free variables, rename existing
-variables, or perform eliminations or substitutions of variables. (FIXME:
-figure) gives the types of each the (FIXME: z) homomorphisms on terms. Given
-that the ~Term~ type has (FIXME: w) constructors, this means a naive definition
-would require (FIXME: w*z) cases, each at least a line long, and most
-duplicates.
+#+name: term-homomorphisms
+#+caption: The types of all the ~Term~ homomorphisms required to define AMPSL's
+#+caption: Hoare Logic. They are logically split into three groups depending on
+#+caption: whether the homomorphism targets global, local or auxiliary
+#+caption: variables.
+#+begin_src agda2
+module State where
+  subst     : ∀ i → Term Σ Γ Δ t → Term Σ Γ Δ (lookup Σ i) → Term Σ Γ Δ t
+module Var where
+  weaken    : ∀ i → Term Σ Γ Δ t → Term Σ (insert Γ i t′) Δ t
+  weakenAll : Term Σ [] Δ t → Term Σ Γ Δ t
+  elim      : ∀ i → Term Σ (insert Γ i t′) Δ t → Term Σ Γ Δ t′ → Term Σ Γ Δ t
+  elimAll   : Term Σ Γ Δ t → All (Term Σ ts Δ) Γ → Term Σ ts Δ t
+  subst     : ∀ i → Term Σ Γ Δ t → Term Σ Γ Δ (lookup Γ i) → Term Σ Γ Δ t
+module Meta where
+  weaken    : ∀ i → Term Σ Γ Δ t → Term Σ Γ (insert Δ i t′) t
+  weakenAll : ∀ (Δ′ : Vec Type k) (ts : Vec Type m) → Term Σ Γ (Δ′ ++ Δ) t → Term Σ Γ (Δ′ ++ ts ++ Δ) t
+  inject    : ∀ (ts : Vec Type n) → Term Σ Γ Δ t → Term Σ Γ (Δ ++ ts) t
+  elim      : ∀ i → Term Σ Γ (insert Δ i t′) t → Term Σ Γ Δ t′ → Term Σ Γ Δ t
+#+end_src
+
+Three out of eight of AMPSL's Hoare logic rules require manipulating the form of
+terms and assertions to introduce free variables, rename existing variables, or
+perform eliminations or substitutions of variables. [[term-homomorphisms]] gives the
+types of each the ten homomorphisms on terms. Given that the ~Term~ type has 32
+constructors, this means a naive definition would require 320 cases, each at
+least a line long, and most duplicates.
 
 This number can be greatly reduced by realising that the only interesting cases
 in these homomorphisms are the constructors for variables: ~state~, ~var~ and
 ~meta~. By giving the action of a homomorphism on these three constructors,
 you can construct the definition of a full homomorphism.
 
-This is best illustrated by an example. (FIXME: figure) shows how weakening
-local variables can be extended to a full homomorphism by only giving the
-~state~, ~var~ and ~meta~ cases. As weakening local variables only affects the
-~var~ case, the ~state~ and ~meta~ cases are identities. The ~var~ case then
-"punches in" the new variable, wrapped in a type cast to satisfy Agda's
-dependant typing.
+#+name: term-weakening
+#+caption: A record that defines the three interesting cases for weakening a
+#+caption: ~Term~ by adding a new local variable. A generic function extends a
+#+caption: ~RecBuilder~ into a full term homomorphism.
+#+begin_src agda2
+weakenBuilder : ∀ i → RecBuilder Σ Γ Δ Σ (insert Γ i t) Δ
+weakenBuilder {Γ = Γ} i = record
+  { onState = state
+  ; onVar   = λ j → Cast.type (Vecₚ.insert-punchIn Γ i _ j) (var (punchIn i j))
+  ; onMeta  = meta
+  }
+#+end_src
+
+This is best illustrated by an example. [[term-weakening]] shows how weakening local
+variables can be extended to a full homomorphism by only giving the ~state~,
+~var~ and ~meta~ cases. As weakening local variables only affects the ~var~
+case, the ~state~ and ~meta~ cases are identities. The ~var~ case then "punches
+in" the new variable, wrapped in a type cast to satisfy Agda's dependant typing.
 
 Proving that the term manipulations are indeed homomorphisms in the semantics
-also requires fewer lines than the (FIXME: w*z) naive cases. Like with the
-manipulation definitions, the proofs only need to given for the ~state~, ~var~
-and ~meta~ cases. However, it is not enough for a proof to simply show that the
-~state~ ~var~ and ~meta~ cases are homomorphisms. The proof must also state how
-to extend or reduce the variable contexts to the correct form.
+also requires fewer lines than the 320 naive cases. Like with the manipulation
+definitions, the proofs only need to given for the ~state~, ~var~ and ~meta~
+cases. However, it is not enough for a proof to simply show that the ~state~
+~var~ and ~meta~ cases are homomorphisms. The proof must also state how to
+extend or reduce the variable contexts to the correct form.
+
+#+name: term-weakening-proof
+#+caption: A record that shows that ~Term.Var.weaken~ is a homomorphism that
+#+caption: preserves semantics. Because the variable contexts change between the
+#+caption: two sides of the homomorphism, this record has to describe how to
+#+caption: extend the variable contexts first. Then it has to show the actions
+#+caption: of ~Term.Var.weaken~ on global, local and auxiliary variables are
+#+caption: indeed homomorphisms. A similar record type exists for homomorphisms
+#+caption: that restrict the variable contexts like variable elimination.
+#+begin_src agda2
+weakenBuilder : ∀ i → ⟦ t ⟧ₜ → RecBuilder⇒ (Term.Var.weakenBuilder {Σ = Σ} {Γ = Γ} {Δ = Δ} {t = t} i)
+weakenBuilder {t = t} {Γ = Γ} i v = record
+  { onState⇒ = λ σ γ δ → σ
+  ; onVar⇒   = λ σ γ δ → Core.insert′ i Γ γ v
+  ; onMeta⇒  = λ σ γ δ → δ
+  ; onState-iso = λ _ _ _ _ → refl
+  ; onVar-iso   = onVar⇒
+  ; onMeta-iso  = λ _ _ _ _ → refl
+  }
+  where
+
+  onVar⇒ : ∀ j σ γ δ → _
+  onVar⇒ j σ γ δ = begin
+    Term.⟦ Term.Cast.type eq (var (punchIn i j)) ⟧ σ γ′ δ
+      ≡⟨ Cast.type eq (var (punchIn i j)) σ γ′ δ ⟩
+    subst ⟦_⟧ₜ eq (Core.fetch (punchIn i j) (insert Γ i t) γ′)
+      ≡⟨ Coreₚ.fetch-punchIn Γ i t j γ v ⟩
+    Core.fetch j Γ γ
+      ∎
+    where
+    open ≡-Reasoning
+    γ′ = Core.insert′ i Γ γ v
+    eq = Vecₚ.insert-punchIn Γ i t j
+#+end_src
 
 Returning to the local variable weakening example, the relevant construction for
-proof is shown in (FIXME: figure). First I specify how to modify the variable
-contexts. The global and auxiliary variable contexts are unchanged, whereas a
-value for the weakened variable is inserted into the local variable context.
-Then we prove the homomorphism is correct on each of ~state~, ~var~ and ~meta~.
-As ~state~ and ~meta~ were unchanged, the proof is trivial by reflexivity. The
-variable case is also quite simple, first proving that the ~Cast.type~ function
-is denotationally the same as a substitution, and then showing that fetching a
-"punched in" index from a list with an insertion is the same as fetching the
-original index from an unmodified list.
+proof is shown in [[term-weakening-proof]]. First I specify how to modify the
+variable contexts. The global and auxiliary variable contexts are unchanged,
+whereas a value for the weakened variable is inserted into the local variable
+context.  Then we prove the homomorphism is correct on each of ~state~, ~var~
+and ~meta~.  As ~state~ and ~meta~ were unchanged, the proof is trivial by
+reflexivity. The variable case is also quite simple, first proving that the
+~Cast.type~ function is denotationally the same as a substitution, and then
+showing that fetching a "punched in" index from a list with an insertion is the
+same as fetching the original index from an unmodified list.
 
-In total, these two optimisations save roughly (FIXME: x) lines of Agda code in
+In total, these two optimisations save roughly 580 lines of Agda code in
 the definition and proofs of term manipulations. However, there are still
-roughly (FIXME: y) lines remaining that would be difficult to reduce further.
+roughly 800 lines remaining that would be difficult to reduce further.
 
 Assertion manipulations have a similar amount of repetition as term
 manipulations. However, there are two important differences that make a generic
 recursion scheme unnecessarily complex. First, the ~Assertion~ type has fewer
-constructors, totalling (FIXME: x) instead of (FIXME: y). Whilst homomorphisms
+constructors, totalling nine instead of 32. Whilst homomorphisms
 will still feature a bunch of boilerplate, it occurs at a much lower ratio
 compared to the amount of useful code. The second reason is that the ~all~ and
 ~some~ constructors introduce new auxiliary variables. This means that the
@@ -1654,7 +1735,7 @@ The ~pred~ constructor delegates the work to proofs on the ~Term~ manipulations,
 using the resulting propositional equality to safely return the input term.
 
 *** Soundness of ~declare~, ~for~ and ~invoke~
-Referring back to (FIXME: figure) for the Hoare logic definitions, we can now
+Referring back to [[AMPSL-Hoare-logic]] for the Hoare logic definitions, we can now
 prove soundness for the other rules. The ~declare~ rule is quite simple. First,
 we create a proof that the weakened precondition holds, and add to it a proof
 that the additional variable is indeed the initial value of the newly-declared
@@ -1663,17 +1744,36 @@ the weakened post-condition holds. Finally, we apply the weakening proof for
 ~Assertion~ in reverse, obtaining a proof that the postcondition holds.
 
 The proof for ~for~ is much more involved, and only an outline will be given. I
-will also reuse the syntax from (FIXME: backref) for the invariant.  By using
-the implication premises for the ~for~ Hoare logic rule, we can obtain a proof
-that ~I(0)~ holds from the argument, and convert a proof of ~I(m)~ to a proof of
-the post-condition. All that remains is a proof that the loop preserves the
-invariant.
+will also reuse the syntax from [[*Correctness Triples for AMPSL]] for the
+invariant.  By using the implication premises for the ~for~ Hoare logic rule, we
+can obtain a proof that ~I(0)~ holds from the argument, and convert a proof of
+~I(m)~ to a proof of the post-condition. All that remains is a proof that the
+loop preserves the invariant.
+
+#+name: foldl-prototype
+#+caption: The function signature for proving arbitrary properties about left-folding a vector.
+#+begin_src agda2
+foldl⁺ : ∀ {a b c} {A : Set a} (B : ℕ → Set b) {m} →
+         (P : ∀ {i : Fin (suc m)} → B (Fin.toℕ i) → Set c) →
+         (f : ∀ {n} → B n → A → B (suc n)) →
+         (y : B 0) →
+         (xs : Vec A m) →
+         (∀ {i} {x} →
+          P {Fin.inject₁ i} x →
+          P {suc i}
+            (subst B (Finₚ.toℕ-inject₁ (suc i))
+                     (f x (Vec.lookup xs i)))) →
+         P {0F} y →
+         P {Fin.fromℕ m}
+           (subst B (sym (Finₚ.toℕ-fromℕ m))
+                    (Vec.foldl B f y xs))
+#+end_src
 
 To do this, I first had to prove a much more general statement about the action
-of left-fold on Agda's ~Vec~ type, the prototype of which is given in (FIXME:
-figure). In summary, given a proof of ~P~ for the base case, and a proof that
-each step of the fold preserves ~P~, then it shows that ~P~ holds in for the
-entire fold.
+of left-fold on Agda's ~Vec~ type, the prototype of which is given in
+[[foldl-prototype]]. In summary, given a proof of ~P~ for the base case, and a proof
+that each step of the fold preserves ~P~, then it shows that ~P~ holds in for
+the entire fold.
 
 This means that the remainder of the proof of soundness of ~for~ is a proof that
 each iteration maintains the invariant. Using a number of lemma asserting that
@@ -1701,25 +1801,31 @@ postcondition assertions explicitly. This results in the following Agda type for
 the most general proof of correctness:
 
 #+begin_src agda2
-FIXME: type
+-- impossible to prove
+correct : (∀ σ γ δ →
+           Assertion.⟦ P ⟧ σ γ δ →
+           uncurry Assertion.⟦ Q ⟧
+             (Semantics.stmt s (σ , γ))
+             δ) →
+          P ⊢ s ⊢ Q
 #+end_src
 
 Unfortunately this is formulation also very quickly runs into a problem in Agda.
-Consider the statement ~s \. s\_1~. To prove this in AMPSL's Hoare logic, we
-need to give two subproofs: ~P \|- s \|- R~ and ~R \|- s\_1 \|- Q~. As input, we
-have a single function transforming proofs of the precondition to proofs of the
-postcondition. The problem occurs because there is no way to decompose this
-function into two parts, one for the first statement and another for the second.
+Consider the statement ~s ∙ s₁~. To prove this in AMPSL's Hoare logic, we need
+to give two subproofs: ~P ⊢ s ⊢ R~ and ~R ⊢ s₁ ⊢ Q~. As input, we have a single
+function transforming proofs of the precondition to proofs of the postcondition.
+The problem occurs because there is no way to decompose this function into two
+parts, one for the first statement and another for the second.
 
 To resolve this, I anticipate that proving correctness in AMPSL's Hoare logic
 will require the following steps:
 
-1. Construction of a function ~wp : Statement Σ Γ \r Assertion Σ Γ Δ \r Assertion
-  Σ Γ Δ~ that computes the weakest precondition of an assertion.
-2. A proof that for all statements ~s~ and assertions ~P~, ~wp s P \|- s \|- P~
-   is satisfiable.
-3. A proof that for all statements ~s~ and assertions ~P~ and ~Q~, ~P \|- s \|-
-   Q~ implies ~P \sub= wp s Q~.
+1. Construction of a function ~wp : Statement Σ Γ → Assertion Σ Γ Δ → Assertion
+   Σ Γ Δ~ that computes the weakest precondition of an assertion.
+2. A proof that for all statements ~s~ and assertions ~P~, ~wp s P ⊢ s ⊢ P~ is
+   satisfiable.
+3. A proof that for all statements ~s~ and assertions ~P~ and ~Q~, ~P ⊢ s ⊢ Q~
+   implies ~P ⊆ wp s Q~.
 4. A proof that the rule of consequence is derivable from the other AMPSL Hoare
    logic rules.
 
@@ -1735,18 +1841,21 @@ can now give this formulation for the correctness of AMPSL's Hoare logic, which
 follows trivially from the four steps above:
 
 #+begin_src agda2
-FIXME: type
+correct : (∀ σ γ δ →
+           Assertion.⟦ P ⟧ σ γ δ →
+           Assertion.⟦ wp s Q ⟧ σ γ δ) →
+          P ⊢ s ⊢ Q
 #+end_src
 
 Constructing the weakest preconditions from an ~Assertion~ and ~Statement~
 should be a relatively simple recursion. I will sketch the ~if_then_else~,
-~invoke~ and ~for~ cases. For ~if e then s else s\_1~, we can recursively
-construct the weakest preconditions ~P~ and ~P\_1~ for ~s~ and ~s\_1~
-respectively. The weakest precondition of the full statement will then be
-~P \and e \or P\_1 \and inv e~.
+~invoke~ and ~for~ cases. For ~if e then s else s₁~, we can recursively
+construct the weakest preconditions ~P~ and ~P₁~ for ~s~ and ~s₁~ respectively.
+The weakest precondition of the full statement will then be ~P ∧ e ∨ P₁ ∧ inv
+e~.
 
-To find the weakest precondition of a function invocation ~invoke (s \.end) es~
-and ~Q~, first find the weakest precondition of ~s~ and ~Q'~ , where ~Q'~ is the
+To find the weakest precondition of a function invocation ~invoke (s ∙end) es~
+and ~Q~, first find the weakest precondition of ~s~ and ~Q′~ , where ~Q′~ is the
 result of replacing local variables in ~Q~ with auxiliary variables in the same
 manner as the ~invoke~ AMPSL Hoare logic rule. Then, apply the inverse
 transformation to the auxiliary variables, and finally replace occurrences of
@@ -1777,33 +1886,170 @@ are additional conditions on which instructions can be anticipated, essentially
 boiling down to any order that has the same result as executing the instructions
 linearly.
 
+#+name: ExecBeats-impl
+#+caption: A side-by-side comparison of the ~ExecBeats~ function from
+#+caption: (FIXME: textcite) versus a simplified implementation in AMPSL. The
+#+caption: AMPSL model assumes a linear instruction ordering.
+#+begin_figure
+\begin{subfigure}[b]{0.45\textwidth}
+\begin{verbatim}
+FIXME: Arm pseudocode for execbeats
+\end{verbatim}
+\caption{Arm pseudocode}
+\label{ExecBeats-impl-Arm}
+\end{subfigure}
+\hfill
+\begin{subfigure}[b]{0.45\textwidth}
+\begin{minted}{agda}
+ExecBeats : Procedure State [] → Procedure State []
+ExecBeats DecodeExec =
+  for 4 (
+    let beatId = var 0F in
+    BeatId ≔ beatId ∙
+    AdvanceVPTState ≔ lit true ∙
+    invoke DecodeExec [] ∙
+    if ! AdvanceVPTState
+    then
+      invoke VPTAdvance (beatId ∷ []))
+  ∙end
+\end{minted}
+\caption{AMPSL model}
+\label{ExecBeats-impl-AMPSL}
+\end{subfigure}
+#+end_figure
+
 The choice of which instructions beats to schedule is in the ~ExecBeats~
 pseudocode function (FIXME: cite). Compared with my model, shown side-by-side in
-(FIXME figure), I reduce the scheduling part to a linear order where all beats
+[[ExecBeats-impl]], I reduce the scheduling part to a linear order where all beats
 of a beatwise instruction are executed in a tick.
 
-Another pseudocode function I have decided to omit is (FIXME: check the name)
-~DecodeExecute~. This performs instruction decoding as specified in the (FIXME:
-chapter name) part of (FIXME: textcite), and then performs the execution step
-specified further down the instruction descriptions. I instead decided to give
-~ExecBeats~ a procedure that performs the execution of a single instruction.
+Another pseudocode function I have decided to omit is  ~DecodeExecute~. This
+performs instruction decoding as specified in the (FIXME: chapter name) part of
+(FIXME: textcite), and then performs the execution step specified further down
+the instruction descriptions. I instead decided to give ~ExecBeats~ a procedure
+that performs the execution of a single instruction.
 
 The two instructions needed to model the Barrett reduction implementation
 algorithm in (FIXME: textcite) are ~VQMLRDH~ and ~VMLA~, given in (FIXME:
 figure) along with my model counterparts. Both procedures end with a loop that
 copies the masked bytes of an intermediate result into the destination register.
-This is the action performed by the ~copyMasked~ procedure given in (FIXME:
-figure) back in (FIXME: ref).
+This is the action performed by the ~copyMasked~ procedure given back in
+[[*Example AMPSL Statements]].
 
 The final AMPSL procedure used to calculate Barrett reduction is in (FIXME:
-figure).
+figure). As Barrett reduction is performed with a fixed positive base, the
+procedure takes the base as a non-zero Agda natural number.
 
+This definition was tested by using the following snippet, instantiating
+the ~int~ and ~real~ types with Agda integers and rationals respectively.
+
+#+begin_src
+do-barrett : (n : ℕ) →
+             (zs : Vec ℤ 4) →
+             Statement State []
+do-barrett n zs =
+  for 4 (
+    Q[ lit 0F , var 0F ] ≔
+      call (sliceⁱ 0) (index (lit zs) (var 0F) ∷ [])) ∙
+  invoke (barrett n 1F 0F 0F) []
+
+barrett-101 : Statement State []
+barrett-101 = do-barrett 101 (+ 1 ∷ + 7387 ∷ + 102 ∷ - 7473 ∷ [])
+#+end_src
+
+Asking Agda to normalise the ~barrett-101~ value, which expands the function
+definitions to produce a single ~Statement~, results in a 16KB ~Statement~. When
+I tried to evaluate this denotationally, Agda crashed after 45 minutes.
+
+Despite this example being relatively small, the poor performance of AMPSL's
+denotational semantics highlights the necessity of the syntax-directed Hoare
+logic proof system. Using the Hoare logic rules to attempt to directly prove
+that barrett-101 has the desired effect leads to a very tedious proof of
+expanding out the whole derivation tree.
+
+*** Proving Reusable Results
+One fundamental principle of programming is DRY: don't repeat yourself. This is
+achieved by using functions and procedures to abstract out common behaviours.
+Similarly, to fully utilise the power of Hoare logic, an abstract reusable
+correctness triple should be given for the behaviour of invoking functions.
+
+I attempted to do this for the ~copyMasked~ procedure given in [[*Example AMPSL
+Statements]], the type of which is given below:
+
+#+begin_src agda2
+copyMasked-mask-true : ∀ {i v beat mask} {P Q : Assertion State Γ Δ} →
+                    P ⊆ equal (↓ mask) (lit (replicate (lift Bool.true))) →
+                    P ⊆ Assertion.subst Q Q[ i , beat ] (↓ v) →
+                    P ⊢ invoke copyMasked (i ∷ v ∷ beat ∷ mask ∷ []) ⊢ Q
+#+end_src
+
+Explained briefly, whenever the mask is all true (~I~), the procedure effectively
+reduces to a regular assignment rule in for AMPSL's Hoare logic. Expanding the
+proof derivation results in the following Agda term:
+
+#+begin_src agda2
+invoke
+  (for
+    {!!}
+    {!!}
+    (if
+      (assign {!!})
+      {!!})
+    {!!})
+#+end_src
+
+The holes correspond to a choice of loop invariant and then four logical
+implications: entering the loop; leaving the loop; showing the assignment
+preserves the loop invariant; and showing that skipping the assignment preserves
+the loop invariant.
+
+Whilst none of those steps are particularly tricky, they each require the proofs
+of many trivial-on-paper lemma. Due to the time constraints of the project, I
+have been unable to complete these proofs.
 
 * Proof of Barrett Reduction
+Barrett reduction is an algorithm to find a small representative of a value
+\(z\) modulo some base \(n\). Instead of having to perform expensive integer
+division, Barrett reduction instead uses an approximation function to precompute
+a coefficient \(m = \llbracket 2^k / n \rrbracket\). The integer division \(z /
+n\) is then approximated by the value \(\left\llbracket \frac{zm}{2^k}
+\right\rrbracket\).
 
-# This chapter may be called something else\ldots but in general the
-# idea is that you have one (or a few) ``meat'' chapters which describe
-# the work you did in technical detail.
+There are many choices of function that are suitable for the two approximations.
+(FIXME: textcite) used the floor function in both cases, whereas the Barrett
+reduction implementation by (FIXME: textcite) instead uses \(\llbracket z
+\rrbracket = 2 \left\lfloor \frac{z}{2} \right\rfloor\). Work by (FIXME:
+textcite) proves results for regular rounding at runtime, but any
+\ldquo{}integer approximation\rdquo{} for precomputing the coefficient \(m\).
+
+The simplest form of Barrett reduction is that of Barrett, using two floor
+approximations. Thus this is the version for which I have produced my initial
+proof.
+
+Unlike the previous authors, who all dealt explicitly with integers and
+rationals, I instead proved a more abstract result for an arbitrary commutative
+ordered ring \(ℤ\) and ordered field \(ℝ\) with a homomorphism \(\cdot/1 : ℤ
+\to ℝ\) and a floor function \(\lfloor\cdot\rfloor : ℝ \to ℤ\) that is /not
+necessarily/ a homomorphism.
+
+This decision will eventually allow for the direct use of this result in
+abstract proofs about the AMPSL Barrett reduction algorithm. This is due to the
+choice of AMPSL's type models for ~int~ and ~real~ as abstract structures,
+discussed in [[*AMPSL Datatype Models]].
+
+One major time sink for this abstraction was the complete lack of support from
+preexisting Agda proofs. Ordered structures like the rings and fields required
+are not present in the Agda standard library version 1.7, and the
+discoverability of other Agda libraries is lacking. Thus much work was spent
+encoding these structures and proving many trivial lemma about them, such as
+sign-preservation, monotonicity and cancelling proofs.
+
+In total I was able to prove three important properties of the flooring variants
+of Barrett reduction, listed using Agda in (FIXME: figure). The first property
+states that Barrett reduction does indeed perform a modulo reduction. The second
+ensures that the Barrett reduction of a positive value is remains positive. The
+final property states that for sufficiently small values of \(z\), Barrett
+reduction produces a representable no more than twice the size of the base.
 
 * Summary and Conclusions
 
@@ -1822,11 +2068,11 @@ figure).
 
 \appendix
 
+* AMPSL Syntax Definition
+* AMPSL Denotational Semantics
+* AMPSL Hoare Logic Definitions
+
 #+latex: \label{lastpage}
 #+latex: %TC:endignore
 
 #  LocalWords:  AMPSL Hoare NTT PQC structs bitstring bitstrings
-
-* AMPSL Syntax Definition
-* AMPSL Denotational Semantics
-* AMPSL Hoare Logic Definitions
