@@ -77,6 +77,8 @@
 #+latex_header: \newunicodechar{≟}{\ensuremath{\buildrel ?\over =}}
 #+latex_header: \newunicodechar{≡}{\ensuremath{\equiv}}
 #+latex_header: \newunicodechar{≢}{\ensuremath{\not\equiv}}
+#+latex_header: \newunicodechar{≤}{\ensuremath{\le}}
+#+latex_header: \newunicodechar{≥}{\ensuremath{\ge}}
 #+latex_header: \newunicodechar{⊆}{\ensuremath{\subseteq}}
 #+latex_header: \newunicodechar{⊎}{\ensuremath{\uplus}}
 #+latex_header: \newunicodechar{⊔}{\ensuremath{\sqcup}}
@@ -268,8 +270,8 @@ This report focuses on formalising the semantics of the Armv8-M architecture.
 [cite/t:@arm/DDI0553B.s] provides a pseudocode description of the operation of
 Armv8-M instructions using the Arm pseudocode (henceforth \ldquo{}the
 pseudocode\rdquo{}).  Unfortunately this language is primarily designed for
-describing instructions (FIXME: cite) and not proving properties of executing
-them.
+describing instructions [cite:@arm/DDI0553B.s §E1.1.1] and not proving
+properties of executing them.
 
 To remedy this, I designed AMPSL, which mocks the pseudocode specification
 language. AMPSL is written in the dependently-typed Agda proof assistant
@@ -625,13 +627,13 @@ RISC-V architecture.
 Sail has many different backends available, including sequential emulators,
 concurrency models and theorem-prover definitions. Further, there are tools to
 automatically translate documents from the Arm Specification Language into Sail
-(FIXME: cite).
+[cite:@10.1145/3290384].
 
 Despite the many advantages of Sail over other solutions, using Sail in this
 project is not suitable for a number of reasons. First is the poor or
 nonexistent documentation of the Sail theorem-proving backends. Trying to decode
-the output of these tools, given that the input for the RISC-V model is 1.2MiB,
-would be time consuming.
+the output of these tools would consume too much of the available time for the
+project.
 
 Another reason to avoid Sail is the unnecessary complexity in modelling the ISA
 semantics. Sail attempts to model the full complexity of the semantics,
@@ -640,6 +642,7 @@ unnecessary for the Arm M-profile architecture, as it has a single thread of
 execution. This makes the semantics much simpler to reason about.
 
 ** ?
+(FIXME: add more related work by following citations.)
 
 * Design of AMPSL and its Semantics
 In this chapter I introduce AMPSL, a language mocking the Arm pseudocode. AMPSL
@@ -812,10 +815,10 @@ pseudocode. The ~LocalReference~ type is identical to ~Reference~, except it
 does not include global variables. Due to complications to the semantics of
 multiple assignments to one location, "product" operations like ~merge~ and
 ~cons~ are excluded from being references, despite concatenated bitstrings and
-tuples being assignable expressions in the pseudocode. Whilst (FIXME: textcite)
-requires that no position in a bitstring is referenced twice, enforcing this in
-AMPSL for ~merge~ and ~cons~ would make their use unergonomic in practice for
-writing code or proofs.
+tuples being assignable expressions in the pseudocode. Whilst
+[cite:@arm/DDI0553B.s §E1.3.3] requires that no position in a bitstring is
+referenced twice, enforcing this in AMPSL for ~merge~ and ~cons~ would make
+their use unergonomic in practice for writing code or proofs.
 
 (FIXME: necessary?) In an earlier form of AMPSL, instead of separate types for
 assignable expressions which can and cannot assign to state, there were two
@@ -827,9 +830,9 @@ without much difficulty, meaning the use of ~Reference~ and ~LocalReference~ in
 AMPSL programs is transparent.
 
 **** Example AMPSL Expressions
-One arithmetic operator used in the pseudocode is left shift. (FIXME: textcite)
-explains how this can be encoded using other arithmetic operators in AMPSL, as
-shown below:
+One arithmetic operator used in the pseudocode is left shift.
+[cite:@arm/DDI0553B.s §E1.3.4] explains how this can be encoded using other
+arithmetic operators in AMPSL, as shown below:
 
 #+begin_src agda2
 _<<_ : Expression Σ Γ int → (n : ℕ) → Expression Σ Γ int
@@ -1076,13 +1079,6 @@ to find encodings of AMPSL types within Agda. [[AMPSL-type-models]] shows the fu
 encoding function. Most of the choices are fairly trivial: Agda Booleans for
 ~bool~, Agda vectors for ~array t n~ and the Agda finite set type ~Fin n~ for
 the AMPSL type ~fin n~.
-
-# RESOLVED: bit is an alias for bool.
-# In this encoding, ~bool~ and ~bit~ are both represented by Agda Booleans. This
-# again begs the question of why they are distinct types in AMPSL and are not
-# unified into one. The philosophical reasoning used by (FIXME: textcite) is now
-# diluted; ~array~ is used for abstract arrays and physical bitstrings. (FIXME:
-# why are they distinct?)
 
 Tuples are the next simplest type, being encoded as an n-ary product. This is
 the action of the ~⟦_⟧ₜₛ~ function in [[AMPSL-type-models]]. Unfortunately the Agda
@@ -1551,9 +1547,10 @@ to be taken to show a restricted form of completeness for AMPSL.
 
 The other half of this chapter will give a practical example of using AMPSL to
 prove a proposition. I will give the AMPSL encoding of the pseudocode form of
-the Barrett reduction algorithm given by (FIXME: textcite). I will demonstrate
-how this works on some concrete values, and explain what work is left to be done
-to prove a more general statement.
+the Barrett reduction algorithm given by
+[cite/t:@10.46586/tches.v2022.i1.482-505]. I will demonstrate how this works on
+some concrete values, and explain what work is left to be done to prove a more
+general statement.
 
 ** Soundness of AMPSL's Hoare Logic
 
@@ -1866,34 +1863,62 @@ the procedure-local variables with the arguments.
 ** Using AMPSL for Proofs
 
 This chapter will describe how I converted the Arm pseudocode representing a
-Barrett reduction implementation (FIXME: cite) into AMPSL, focusing on the
-modelling choices I made. I will then discuss how to use the AMPSL code in
-concrete proofs for specific values, before concluding with the steps necessary
-to abstract the proof to arbitrary values.
+Barrett reduction implementation [cite:@10.46586/tches.v2022.i1.482-505] into
+AMPSL, focusing on the modelling choices I made. I will then discuss how to use
+the AMPSL code in concrete proofs for specific values, before concluding with
+the steps necessary to abstract the proof to arbitrary values.
 
 The most significant modelling decisions are the omissions of the ~TopLevel~
-(FIXME: cite) and the ~InstructionExecute~ (FIXME: cite) pseudocode functions.
-~TopLevel~ primarily deals with debugging, halt and lockup processor states,
-none of which are relevant for the Barrett reduction or NTT correctness proofs I
-am working towards. ~InstructionExecute~ deals with fetching instructions and
-deciding whether to execute an instruction "beatwise" or linearly.
+[cite:@arm/DDI0553B.s §E2.1.400] and the ~InstructionExecute~
+[cite:@arm/DDI0553B.s §E2.1.225] pseudocode functions.  ~TopLevel~ primarily
+deals with debugging, halt and lockup processor states, none of which are
+relevant for the Barrett reduction or NTT correctness proofs I am working
+towards. ~InstructionExecute~ deals with fetching instructions and deciding
+whether to execute an instruction "beatwise" or linearly.
 
 Most vector instructions for the Armv8.1-M architecture are executed beatwise. A
 vector register is a 128-bit value with four 32-bit lanes. Beatwise execution
 allows some lanes to anticipate future vector instructions and execute them
-before a previous instruction has finished on other lanes (FIXME: cite). There
-are additional conditions on which instructions can be anticipated, essentially
-boiling down to any order that has the same result as executing the instructions
-linearly.
+before a previous instruction has finished on other lanes [cite:@arm/DDI0553B.s
+§B5.4]. There are additional conditions on which instructions can be
+anticipated, essentially boiling down to any order that has the same result as
+executing the instructions linearly.
 
 #+name: ExecBeats-impl
-#+caption: A side-by-side comparison of the ~ExecBeats~ function from
-#+caption: (FIXME: textcite) versus a simplified implementation in AMPSL. The
-#+caption: AMPSL model assumes a linear instruction ordering.
+#+caption: A side-by-side comparison of a simplified form of the ~ExecBeats~
+#+caption: function from [cite:@arm/DDI0553B.s §E2.1.121] versus the model used
+#+caption: in AMPSL. (FIXME: figure padding).
 #+begin_figure
 \begin{subfigure}[b]{0.45\textwidth}
 \begin{verbatim}
-FIXME: Arm pseudocode for execbeats
+boolean ExecBeats()
+  newBeatComplete = BeatComplete
+  _InstId = instId;
+  _CurrentInstrExecState = GetInstrExecState(instId);
+  InstStateCheck(ThisInstr());
+  for beatInTick = 0 to BEATS_PER_TICK-1
+    beatId = beatInTick
+    beatFlagIdx = (instId * MAX_BEATS) + beatId;
+    if newBeatComplete[beatFlagIdx] == '0' then
+      _BeatId          = beatId;
+      _AdvanceVPTState = TRUE;
+      cond             = DefaultCond();
+      DecodeExecute(
+        ThisInstr(),
+        ThisInstrAddr(),
+        ThisInstrLength() == 2,
+        cond);
+      newBeatComplete[beatFlagIdx] = '1';
+      if _AdvanceVPTState then
+        VPTAdvance(beatId);
+  commitState =
+    newBeatComplete[MAX_BEATS-1:0] ==
+    Ones(MAX_BEATS);
+  if commitState then
+    newBeatComplete =
+      LSR(newBeatComplete, MAX_BEATS);
+  BeatComplete = newBeatComplete
+  return commitState;
 \end{verbatim}
 \caption{Arm pseudocode}
 \label{ExecBeats-impl-Arm}
@@ -1901,7 +1926,8 @@ FIXME: Arm pseudocode for execbeats
 \hfill
 \begin{subfigure}[b]{0.45\textwidth}
 \begin{minted}{agda}
-ExecBeats : Procedure State [] → Procedure State []
+ExecBeats : Procedure State [] →
+            Procedure State []
 ExecBeats DecodeExec =
   for 4 (
     let beatId = var 0F in
@@ -1919,22 +1945,22 @@ ExecBeats DecodeExec =
 #+end_figure
 
 The choice of which instructions beats to schedule is in the ~ExecBeats~
-pseudocode function (FIXME: cite). Compared with my model, shown side-by-side in
-[[ExecBeats-impl]], I reduce the scheduling part to a linear order where all beats
-of a beatwise instruction are executed in a tick.
+pseudocode function [cite:@arm/DDI0553B.s §E2.1.121]. Compared with my model,
+shown side-by-side in [[ExecBeats-impl]], I reduce the scheduling part to a linear
+order where all beats of a beatwise instruction are executed in a tick.
 
 Another pseudocode function I have decided to omit is  ~DecodeExecute~. This
-performs instruction decoding as specified in the (FIXME: chapter name) part of
-(FIXME: textcite), and then performs the execution step specified further down
-the instruction descriptions. I instead decided to give ~ExecBeats~ a procedure
-that performs the execution of a single instruction.
+performs instruction decoding as specified in Chapter C2 of
+[cite/t:@arm/DDI0553B.s §E2.1.121], and then performs the execution step
+specified further down the instruction descriptions. I instead decided to give
+~ExecBeats~ a procedure that performs the execution of a single instruction.
 
 The two instructions needed to model the Barrett reduction implementation
-algorithm in (FIXME: textcite) are ~VQMLRDH~ and ~VMLA~, given in (FIXME:
-figure) along with my model counterparts. Both procedures end with a loop that
-copies the masked bytes of an intermediate result into the destination register.
-This is the action performed by the ~copyMasked~ procedure given back in
-[[*Example AMPSL Statements]].
+algorithm by [cite/t:@10.46586/tches.v2022.i1.482-505] are ~VQMLRDH~ and ~VMLA~,
+given in (FIXME: figure) along with my AMPSL model counterparts. Both procedures
+end with a loop that copies the masked bytes of an intermediate result into the
+destination register.  This is the action performed by the ~copyMasked~
+procedure given back in [[*Example AMPSL Statements]].
 
 The final AMPSL procedure used to calculate Barrett reduction is in (FIXME:
 figure). As Barrett reduction is performed with a fixed positive base, the
@@ -2016,11 +2042,13 @@ n\) is then approximated by the value \(\left\llbracket \frac{zm}{2^k}
 \right\rrbracket\).
 
 There are many choices of function that are suitable for the two approximations.
-(FIXME: textcite) used the floor function in both cases, whereas the Barrett
-reduction implementation by (FIXME: textcite) instead uses \(\llbracket z
-\rrbracket = 2 \left\lfloor \frac{z}{2} \right\rfloor\). Work by (FIXME:
-textcite) proves results for regular rounding at runtime, but any
-\ldquo{}integer approximation\rdquo{} for precomputing the coefficient \(m\).
+[cite/t:@10.1007/3-540-47721-7_24] used the floor function in both cases,
+whereas the Barrett reduction implementation by
+[cite/t:@10.46586/tches.v2022.i1.482-505] instead uses \(\llbracket z \rrbracket
+= 2 \left\lfloor \frac{z}{2} \right\rfloor\). Work by
+[cite/t:@10.46586/tches.v2022.i1.211-244] proves results for regular rounding at
+runtime, but any \ldquo{}integer approximation\rdquo{} for precomputing the
+coefficient \(m\).
 
 The simplest form of Barrett reduction is that of Barrett, using two floor
 approximations. Thus this is the version for which I have produced my initial
@@ -2044,12 +2072,22 @@ discoverability of other Agda libraries is lacking. Thus much work was spent
 encoding these structures and proving many trivial lemma about them, such as
 sign-preservation, monotonicity and cancelling proofs.
 
+#+name: barrett-properties
+#+caption: Three properties I was able to prove about flooring Barrett reduction
+#+caption: for an abstract ordered ring and field.
+#+begin_src agda2
+barrett-mods     : ∀ z → ∃ λ a → barrett z + a * n ≈ z
+barrett-positive : ∀ {z} → z ≥ 0ℤ → barrett z ≥ 0ℤ
+barrett-limit    : ∀ {z} → 0ℤ ≤ z → z ≤ 2ℤ ^ k → barrett z < 2 × n
+#+end_src
+
 In total I was able to prove three important properties of the flooring variants
-of Barrett reduction, listed using Agda in (FIXME: figure). The first property
-states that Barrett reduction does indeed perform a modulo reduction. The second
-ensures that the Barrett reduction of a positive value is remains positive. The
-final property states that for sufficiently small values of \(z\), Barrett
-reduction produces a representable no more than twice the size of the base.
+of Barrett reduction, listed using Agda in [[barrett-properties]]. The first
+property states that Barrett reduction does indeed perform a modulo reduction.
+The second ensures that the Barrett reduction of a positive value is remains
+positive. The final property states that for sufficiently small values of \(z\),
+Barrett reduction produces a representable no more than twice the size of the
+base.
 
 * Summary and Conclusions
 
