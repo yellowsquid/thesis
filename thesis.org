@@ -23,7 +23,7 @@
 
 #+latex_header: \usepackage[hyperref=true,url=true,backend=biber,natbib=true]{biblatex} % citations
 #+latex_header: \usepackage[vmargin=20mm,hmargin=25mm]{geometry} % page margins
-#+latex_header: \usepackage{minted}         % code snippets
+#+latex_header: \usepackage[chapter]{minted}                     % code snippets
 #+latex_header: \usepackage{parskip}        % vertical space for paragraphs
 #+latex_header: \usepackage{setspace}       % line spacing
 #+latex_header: \usepackage{newunicodechar} % unicode in code snippets
@@ -54,6 +54,7 @@
 #+latex_header: \newunicodechar{⁺}{\ensuremath{^{+}}}
 #+latex_header: \newunicodechar{₁}{\ensuremath{_1}}
 #+latex_header: \newunicodechar{₂}{\ensuremath{_2}}
+#+latex_header: \newunicodechar{₃}{\ensuremath{_3}}
 #+latex_header: \newunicodechar{ₚ}{\ensuremath{_\texttt{p}}}
 #+latex_header: \newunicodechar{ₛ}{\ensuremath{_\texttt{s}}}
 #+latex_header: \newunicodechar{ₜ}{\ensuremath{_\texttt{t}}}
@@ -232,12 +233,44 @@ xyz
 :unnumbered: t
 :END:
 
+The ultimate goal of this work is to formally verify an implementation
+[cite:@10.46586/tches.v2022.i1.482-505] of the number-theoretic transform (NTT)
+for the Armv8.1-M architecture.
+
+This report focuses on producing the first formalisation of the semantics of the
+Armv8-M architecture and its M-profile vector extension. The pseudocode used to
+describe the instructions within the manual by [cite/t:@arm/DDI0553B.s] does not
+have a formal semantic description. I designed AMPSL, to mock the Arm
+specification language, within in Agda. The syntax closely follows that of
+ASL, save some minor modifications due to limitations within Agda and
+adjustments to simplify the semantics.
+
+This report describes both a denotational semantics and Hoare logic for AMPSL.
+The denotational semantics interprets AMPSL statements and expressions as Agda
+functions on a variable context. The Hoare logic instead provides a
+syntax-directed derivation of AMPSL's action on assertions about the execution
+state.
+
+I also use Agda to formally verify a variant of Barrett reduction. Barrett
+reduction is an important subroutine used by the NTT, to efficiently find a
+\ldquo{}small\rdquo{} representable of a value modulo some base
+[cite:@10.1007/3-540-47721-7_24]. Formalising Barrett reduction is a big step in
+formalising the NTT.
+
 #+latex: \ifsubmission\else
 
 * Acknowledgements
 :PROPERTIES:
 :unnumbered: t
 :END:
+
+I would like to thank Dominic Mulligan, Hanno Becker and Gustavo Petri at Arm
+for the initial idea and producing valuable feedback on my project and report
+throughout the year.
+
+I would also like to thank Jeremy Yallop for supervising the project and
+providing support throughout the project. They also provided useful and
+actionable feedback on the various drafts of my report.
 
 #+latex: \fi
 #+latex: \cleardoublepage
@@ -252,33 +285,30 @@ xyz
 
 #+latex: \label{firstcontentpage}
 
-The ultimate goal of this work was to formally verify an implementation
+The ultimate goal of this work is to formally verify an implementation
 [cite:@10.46586/tches.v2022.i1.482-505] of the number-theoretic transform (NTT)
 for the Armv8.1-M architecture.  The NTT is a vital procedure for lattice-based
-post-quantum cryptography (FIXME: cite). To ensure internet-connected embedded
-devices remain secure in the future of large-scale quantum computers,
-implementations of these algorithms, and hence the NTT, are required for the
-architectures they use. One common architecture used by embedded devices is
-Armv8-M (FIXME: cite). Due to the resource-constrained nature of an embedded
-device, and the huge computational demands of post-quantum cryptography,
-algorithms like the NTT are presented using hand-written, highly-optimised
-assembly code. To ensure the correctness of these cryptographic algorithms, and
-thus the security of embedded devices, formal verification of these algorithms
-is necessary.
+post-quantum cryptography. PQC is a type of cryptography immune to rapid attack
+by large-scale quantum computers. Armv8-M is a common architecture in embedded
+devices. Due to the resource-constrained nature of an embedded device, and the
+huge computational demands of post-quantum cryptography, algorithms like the NTT
+are presented using hand-written, highly-optimised assembly code. To ensure the
+correctness of these cryptographic algorithms, and thus the security of embedded
+devices, formal verification of these algorithms is necessary.
 
-This report focuses on formalising the semantics of the Armv8-M architecture.
+This report focuses on producing the first formalisation of the semantics of the
+Armv8-M architecture, in particular its M-profile vector extension.
 [cite/t:@arm/DDI0553B.s] provides a pseudocode description of the operation of
-Armv8-M instructions using the Arm pseudocode (henceforth \ldquo{}the
-pseudocode\rdquo{}).  Unfortunately this language is primarily designed for
-describing instructions [cite:@arm/DDI0553B.s §E1.1.1] and not proving
-properties of executing them.
+Armv8-M instructions using the Arm pseudocode (henceforth ASL). Unfortunately
+this language is primarily designed for describing instructions
+[cite:@arm/DDI0553B.s §E1.1.1] and not proving properties of their semantics.
 
-To remedy this, I designed AMPSL, which mocks the pseudocode specification
-language. AMPSL is written in the dependently-typed Agda proof assistant
-[cite:@10.1007/978-3-642-03359-9_6]. The syntax mirrors that of the pseudocode,
-save some minor modifications due to limitations within Agda and adjustments to
-simplify the semantics. Using Agda enables AMPSL, its semantics, and proofs
-using and about the semantics to be written using a single language.
+To remedy this, I designed AMPSL (Arm M-profile Pseudocode Specification
+Language, or AMPSL Mocks Pseudocode Specification Language), which mocks the Arm
+pseudocode specification language. AMPSL is written in Agda, a dependently-typed
+proof assistant [cite:@10.1007/978-3-642-03359-9_6]. The syntax mirrors that of
+ASL, save some minor modifications due to limitations within Agda and
+adjustments to simplify the semantics.
 
 AMPSL is given semantics in two different forms. The first is a denotational
 semantics, which converts the various program elements into functions within
@@ -287,133 +317,132 @@ processor state. AMPSL also has a set of Hoare logic rules, which form an
 axiomatic, syntax-directed approach to describing how a statement in AMPSL
 modifies assertions on the processor state.
 
-Another significant line of work undertaken by this report is the formal
-verification of Barrett reduction. Barrett reduction is an important subroutine
-used by the NTT, to efficiently find a \ldquo{}small\rdquo{} representable of a
-value modulo some base [cite:@10.1007/3-540-47721-7_24]. Much like how a
-formalisation of the NTT is a big step in formalising the behaviour of many PQC
-algorithms, formalising Barrett reduction is a big step in formalising the NTT.
+Due to AMPSL's similarity to ASL, I can convert the ASL description of Armv8-M
+instructions into AMPSL. From this AMPSL description of the Armv8-M
+instructions, I can derive the semantics of Armv8-M instructions using AMPSL's
+semantics.
+
+I also use Agda to formally verify a variant of Barrett reduction. Barrett
+reduction is an important subroutine used by the NTT, to efficiently find a
+\ldquo{}small\rdquo{} representable of a value modulo some base
+[cite:@10.1007/3-540-47721-7_24]. Much like how a formalisation of the NTT is a
+big step in formalising the behaviour of many PQC algorithms, formalising
+Barrett reduction is a big step in formalising the NTT.
+
+#+name: raw_progress
+#+begin_src dot :file progress.pdf :exports none
+digraph {
+    node [shape=box];
+    A [label="Functional correctness\nof NTT",style=dotted];
+    B [label="Functional correctness\nof Barrett reduction",style=dotted];
+    C [label="NTT properties",style=dotted];
+    D [label="Armv8-M Instruction\nsemantics",style=dashed];
+    E [label="Barrett reduction\nproperties"];
+    F [label="AMPSL semantics"];
+    G [label="AMPSL properties",style=dashed];
+    H [label="Model of Armv8-M\nin AMPSL"];
+
+    H -> D;
+    G -> B;
+    F -> G;
+    F -> D;
+    E -> C [style=dashed];
+    E -> B;
+    D -> B;
+    C -> A;
+    B -> A [style=dashed];
+}
+#+end_src
+
+#+name: progress
+#+caption: Progress made towards formalising an implementation of NTT for the
+#+caption: Armv8.1-M architecture. Work completed in this report has a solid
+#+caption: outline. Items where only trivial, time-consuming work is left have a
+#+caption: dashed border. Work with no significant progress made has a dotted
+#+caption: border.
+call_raw_progress()
+
+[[progress]] shows the progress this work has made to verifying an
+implementation of the NTT for Armv8.1-M vector extension. Whilst it does not
+achieve the final goal, it forms the foundations towards it.
 
 The main contributions of this report are as follows:
 - In [[*AMPSL Syntax]], I introduce the syntax of the AMPSL programming language.
   The primary goal of the syntax is to facilitate easy translation of programs
-  from the Arm pseudocode, detailed in [[*Arm Pseudocode]] into AMPSL, whilst
-  allowing AMPSL semantics to remain simple.
+  from ASL, detailed in [[*Arm Pseudocode]] into AMPSL, whilst allowing AMPSL
+  semantics to remain simple.
 - The semantics of AMPSL are described in [[*AMPSL Semantics]]. The primary
   achievement of this work is the simple semantics of AMPSL, which facilitates
   straight-forward proofs about various AMPSL programs. I detail both a
-  denotational semantics and a Hoare logic for AMPSL. The Hoare logic used by
-  AMPSL somewhat varies from the traditional presentation, given in [[*Hoare
-  Logic]], to enforce that Hoare logic proofs have bounded depth with respect to
-  the program syntax.
-- In [[*Soundness of AMPSL's Hoare Logic]], I prove that the Hoare logic rules for
-  AMPSL are sound with respect to the denotational semantics. This proof is
-  possible due to Agda's foundation of Martin-Löf's type theory, the
-  significance of which is given in [[*Agda]]. Due to the soundness of AMPSL's Hoare
-  logic, the behaviour of the computationally-intensive denotational semantics
-  can instead be specified using syntax-directed Hoare logic.
+  denotational semantics and a Hoare logic for AMPSL.
+- In [[*Soundness of AMPSL's Hoare Logic]], I prove that the set of Hoare logic rules for
+  AMPSL are sound with respect to the denotational semantics. The Hoare logic
+  used by AMPSL somewhat varies from the traditional presentation, given in
+  [[*Hoare Logic]], to enforce that Hoare logic proofs have bounded depth with
+  respect to the program syntax.  This proof is possible due to Agda's
+  foundation of Martin-Löf's type theory, the significance of which is given in
+  [[*Agda]]. Due to the soundness of AMPSL's Hoare logic, the behaviour of the
+  computationally-intensive denotational semantics can instead be specified
+  using syntax-directed Hoare logic.
 - A number of example proofs for AMPSL programs are given in [[*Using AMPSL for
-  Proofs]]. This demonstrates the viability of using AMPSL for the formal
+  Proofs]]. This describes how AMPSL is used to give the semantics of Armv8.1-M
+  instructions. It also demonstrates the viability of using AMPSL for the formal
   verification of a number of programs, and lays the groundwork for the formal
   verification of the NTT given by [cite/t:@10.46586/tches.v2022.i1.482-505].
 - Finally, a formal proof of a Barrett reduction variant is given in [[*Proof of
-  Barrett Reduction]]. (FIXME: As far as I can tell) giving this well-used
-  algorithm a formal machine proof is a novel endeavour. Further, it is the
-  first proof of Barrett reduction on a domain other than integers and
-  rationals.
-
-
-# This is the introduction where you should introduce your work. In
-# general the thing to aim for here is to describe a little bit of the
-# context for your work -- why did you do it (motivation), what was the
-# hoped-for outcome (aims) -- as well as trying to give a brief overview
-# of what you actually did.
-
-# It's often useful to bring forward some ``highlights'' into this
-# chapter (e.g.\ some particularly compelling results, or a particularly
-# interesting finding).
-
-# It's also traditional to give an outline of the rest of the document,
-# although without care this can appear formulaic and tedious. Your
-# call.
+  Barrett Reduction]]. To my knowledge this is the first such machine-verified
+  proof of correctness for Barrett reduction. Further, it is the first proof of
+  Barrett reduction on a domain other than integers and rationals.
 
 * Background
 
-# A more extensive coverage of what's required to understand your work.
-# In general you should assume the reader has a good undergraduate
-# degree in computer science, but is not necessarily an expert in the
-# particular area you have been working on. Hence this chapter may need to
-# summarize some ``text book'' material.
-
-# This is not something you'd normally require in an academic paper, and
-# it may not be appropriate for your particular circumstances. Indeed,
-# in some cases it's possible to cover all of the ``background''
-# material either in the introduction or at appropriate places in the
-# rest of the dissertation.
-
 ** Arm Pseudocode
-The Armv8.1-M pseudocode specification language is a strongly-typed imperative
-programming language [cite:@arm/DDI0553B.s §E1.2.1]. It has a first-order type
-system, a small set of operators and basic control flow, as you would find in
-most imperative languages. Its primary purpose is to explain how executing an
-Armv8-M instruction modifies the visible processor state. As it is a descriptive
-aid, the pseudocode features a number of design choices atypical of other
-imperative programming languages making execution difficult.
+ASL is a strongly-typed imperative programming language [cite:@arm/DDI0553B.s
+§E1.2.1]. It has a first-order type system, a small set of operators and basic
+control flow, as you would find in most imperative languages. Its primary
+purpose is to explain how executing an Armv8-M instruction modifies the visible
+processor state. As it is a descriptive aid, ASL features a number of design
+choices atypical of other imperative programming languages making execution
+difficult.
 
 Something common to nearly all imperative languages is the presence of a
 primitive type for Booleans. Other typical type constructors are tuples,
-structs, enumerations and fixed-length arrays. The first interesting type used
-by the pseudocode is mathematical integers as a primitive type. Most imperative
-languages use fixed-width integers for primitive types, with exact integers
-available through some library. Examples include Rust (FIXME: cite), C (FIXME:
-cite), Java (FIXME: cite) and Go (FIXME: cite). This is because the performance
-benefits of using fixed-width integers in code far outweigh the risk of
-overflow. As checking for integer overflow complicates algorithms, and the
-pseudocode is not designed to execute, the pseudocode can make use of exact
-mathematical integers to eliminate overflow errors without any of the drawbacks
-[cite:@arm/DDI0553B.s §E1.3.4].
+structs, enumerations and fixed-length arrays.
 
-Another odd type present in the pseudocode is mathematical real numbers. As most
-real numbers are impossible to record using finite storage, any executable
-programming language must make compromises to the precision of real numbers.
-This is usually achieved through floating-point numbers, which represent only a
-negligible fraction of possible real number values. However, as the pseudocode
-is not executable, the types it use do not need to have a finite representation.
-Thus it is free to use real numbers and have exact precision in real-number
-arithmetic [cite:@arm/DDI0553B.s §E1.2.4].
+Two interesting primitive types used by ASL are mathematical integers and real
+numbers. Other imperative languages typically use fixed-width integers and
+floating point rationals as efficient approximations for these values, with the
+downside of having overflow and precision loss errors. As ASL is for
+specification over execution, the efficiency of code is of no concern so using
+the mathematical types prevents a whole class of errors.
 
-The final primitive type used by the pseudocode is the bitstring; a fixed-length
-sequence of 0s and 1s. Some readers may wonder what the difference is between
-this type and arrays of Booleans. The justification given by
-[cite/t:@arm/DDI0553B.s §E1.2.2] is more philosophical than practical:
-\ldquo{}bitstrings are the only concrete data type in pseudocode\rdquo{}. In
-some places, bitstrings can be used instead of integers in arithmetic
-operations, by first converting them to an unsigned integer.
+The final primitive type used by ASL is the bitstring; a fixed-length sequence
+of 0s and 1s. Some readers may wonder what the difference is between this type
+and arrays of Booleans. The justification given by [cite/t:@arm/DDI0553B.s
+§E1.2.2] is more philosophical than practical: \ldquo{}bitstrings are the only
+concrete data type in pseudocode\rdquo{}. In some places, bitstrings can be used
+instead of integers in arithmetic operations, by first converting them to an
+unsigned integer.
 
-Most of the operators used by the pseudocode are unsurprising. For instance,
-Booleans have the standard set of short-circuiting operations; integers and
-reals have addition, subtraction and multiplication; reals have division;
-integers have integer division (division rounding to \(-\infty\)) and modulus
-(the remainder of division); and concatenation of bitstrings.
+ASL types have all of the associated standard operations, including equality,
+ordering, Boolean connectives and arithmetic.
 
-The most interesting operation in the pseudocode is bitstring slicing. First,
-there is no type for a bit outside a bitstring---a single bit is represented as
-a bitstring of length one---so bitstring slicing always returns a bitstring.
-Slicing then works in much the same way as array slicing in languages like
-Python (FIXME: cite?) and Rust (FIXME: cite?); slicing an integer range from a
-bitstring returns a new bitstring with values corresponding to the indexed bits.
-The other special feature of bitstring slicing is that an integer can be sliced
-instead of a bitstring. In that case, the pseudocode \ldquo{}treats an integer
-as equivalent to a sufficiently long [\ldots] bitstring\rdquo{}
-[cite:@arm/DDI0553B.s §E1.3.3].
+The most interesting operation in ASL is bitstring slicing. First, there is no
+type for a bit outside a bitstring---a single bit is represented as a bitstring
+of length one---so bitstring slicing always returns a bitstring.  Slicing then
+works in much the same way as array slicing in languages like Python and Rust;
+slicing an integer range from a bitstring returns a new bitstring with values
+corresponding to the indexed bits.  The other special feature of bitstring
+slicing is that an integer can be sliced instead of a bitstring. In that case,
+ASL \ldquo{}treats an integer as equivalent to a sufficiently long [\ldots]
+bitstring\rdquo{} [cite:@arm/DDI0553B.s §E1.3.3].
 
-The final interesting difference between the pseudocode and most imperative
-languages is the variety of top-level items. The pseudocode has three forms of
-items: procedures, functions and array-like functions. Procedures and functions
-behave like procedures and functions of other imperative languages. The
-arguments to them are passed by value, and the only difference between the two
-is that procedures do not return values whilst functions do
-[cite:@arm/DDI0553B.s §E1.4.2].
+The final interesting difference between ASL and most imperative languages is
+the variety of top-level items. ASL has three forms of items: procedures,
+functions and array-like functions. Procedures and functions behave like
+procedures and functions of other imperative languages. The arguments to them
+are passed by value, and the only difference between the two is that procedures
+do not return values whilst functions do [cite:@arm/DDI0553B.s §E1.4.2].
 
 Array-like functions act as getters and setters for machine state. Every
 array-like function has a reader form, and most have a writer form. This
@@ -424,7 +453,25 @@ read-writeable. The writer form acts as one of the targets of assignment
 expressions, along with variables and the result of bitstring concatenation and
 slicing [cite:@arm/DDI0553B.s §E1.3.5].
 
-(FIXME: examples)
+Examples of ASL are given throughout the report, often alongside an AMPSL model
+of it.
+
+** M-profile Vector Extension
+
+The M-profile vector extension adds vector instructions to the Armv8-M
+architecture. A vector in this case is a 128-bit register, logically split into
+four 32-bit beats. Each beat is then divided into one, two or four lanes each of 32,
+16 or 8 bits respectively [cite:@arm/DDI0553B.s §B5.3].
+
+A processor can execute either one, two or four instruction beats in an
+\ldquo{}architecture tick\rdquo{}, an atomic unit of processor time
+[cite:@arm/DDI0553B.s §\(\texttt{I}_\texttt{PCBB}\)]. The number of beats executed per
+instruction can also change throughout execution.
+
+Vector instructions can also overlap during execution. To summarise the overlap
+rules, vector instructions can overlap if there are no inter-beat data
+dependencies, at least beats of the current instruction are complete and at most
+two beats of the next instruction are complete.
 
 ** Hoare Logic
 Hoare logic is a proof system for programs written in imperative programming
@@ -439,12 +486,10 @@ partial correctness triple, then whenever \(P\) holds for some machine state,
 then when executing \(s\), \(Q\) holds for the state after it terminates
 [cite:@10.1145/363235.363259]. This is a /partial/ correctness triple because
 the postcondition only holds if \(s\) terminates. When all statements terminate,
-this relation is called a correctness triple.
+this relation is called a correctness total triple.
 
 #+name: WHILE-Hoare-logic
-#+caption: Hoare logic rules for the WHILE language, consisting of assignment,
-#+caption: if statements and while loops. The top three lines show the structural
-#+caption: rules, and the bottom shows the adaptation rule.
+#+caption: Hoare logic rules for the WHILE language.
 #+begin_figure
 \begin{center}
 \begin{prooftree}
@@ -463,20 +508,25 @@ this relation is called a correctness triple.
 #+end_figure
 
 [[WHILE-Hoare-logic]] shows the rules Hoare introduced for the WHILE language
-[cite:@10.1145/363235.363259]. The SKIP and SEQ rules are straight-forward: the
-skip statement has no effect on state, and sequencing statements composes their
+[cite:@10.1145/363235.363259]. There are two broad classes of Hoare logic rules.
+Structural rules that reflect how program syntax affects execution of a program,
+and thus how to modify the precondition and postcondition assertions
+accordingly. Adaptation rules use the same statement in the premise and
+conclusion. They only adapt the preconditions and postconditions used.
+
+Of the structural rules, the SKIP and SEQ rules reflect the idea that the skip
+statement has no effect on state, and sequencing statements composes their
 effects. The IF rule is also uncomplicated. No matter which branch we take, the
 postcondition remains the same; an if statement does no computation after
 executing a branch.  Which branch we take depends on the value of ~e~. Because
 the value of ~e~ is known before executing a branch, it is added to the
 preconditions in the premises.
 
-The ASSIGN rule appears backwards upon first reading; the substitution is
-performed in the precondition, before the assignment occurs! When considered
-more deeply, you realise the reason for this reversal. Due to the assignment,
-any occurrence of ~v~ in the precondition can be replaced by ~x~, and the
-original value of ~x~ is lost. Hence the postcondition can only use ~x~ exactly
-where there was ~v~ in the precondition. This is enforced by the substitution.
+The ASSIGN rule is perhaps the most unintuitive of the structural rules. In the
+postcondition, any use of ~x~ can be replaced by ~v~ and due to the nature of the
+assignment the assertion maintains its truth value. In the precondition, ~x~
+could have any value, so by applying the substitution of ~v~ for ~x~ to the
+precondition, we fact that ~x~ changes value is irrelevant.
 
 The final structural Hoare logic rule for the WHILE language is the WHILE rule.
 This rule can be derived by observing the fixed-point nature of a while
@@ -484,10 +534,11 @@ statement. As ~while e do s~ is equivalent to ~if e then (s ; while e do s) else
 skip~, we can use the IF, SEQ and SKIP rules to solve the recursion equation for
 the precondition and postcondition of the while statement.
 
-The final Hoare logic rule is the rule of consequence, CSQ. This rule does not
-recurse on the structure of the statement ~s~, but instead adapts the
-precondition and postcondition. In this case, we can weaken the precondition and
-postcondition using logical implication.
+The only adaptation rule in the Hoare logic of WHILE is the rule of consequence,
+CSQ. The rule of consequence is necessary in this Hoare logic so that the
+assertions can be manipulated into forms suitable for use by each structural
+rule. Other forms of Hoare logic, like the one for AMPSL given in [[*Hoare Logic
+Semantics]], make the rule of consequence redundant.
 
 [cite/t:@10.1145/363235.363259] does not specify the logic used to evaluate the
 implications in the rule of consequence. Regular choices are first-order logic
@@ -500,17 +551,15 @@ over within assertions or left as free variables. A free auxiliary variable
 remains constant between the precondition and postcondition, and are
 universally-quantified within proofs.
 
- (FIXME: examples)
-
 ** Agda
 Agda is a dependently-typed proof assistant and functional programming language,
-based on Martin-Löf's type theory.  The work of
-[cite/t:@10.1007/978-3-642-03359-9_6] provides an excellent introduction to the
-language. This section provides a summary of the most important features for the
+based on Martin-Löf's type theory [cite:@10.1007/978-3-642-03359-9_6].
+[cite/t:@10.1007/978-3-642-03359-9_6] provide an excellent introduction to the
+language. I will now summarise the most important features of Agda for the
 implementation of AMPSL.
 
-*Inductive families*. Data types like you would find in ML or Haskell can not
-only be indexed by types, but by specific values. This is best illustrated by an
+*Inductive families*. Agda generalises ML-style datatypes allowing them to be
+indexed by values as well as types. This is best illustrated by an
 example. Take for instance fixed-length vectors. They can be defined by the
 following snippet:
 
@@ -520,57 +569,67 @@ data Vec (A : Set) : ℕ → Set where
   _∷_ : ∀ {n} → A → Vec A n → Vec A (suc n)
 #+end_src
 
-First consider the type of ~Vec~. It is a function that accepts a type ~A~ and a
+Note the type of ~Vec~. It is a function that accepts a type ~A~ and a
 natural number, and returns a type. The position of ~A~ to the left of the colon
 is significant; it is a /parameter/ of ~Vec~ instead of an /index/. Parameters
 are required to be the same for all constructors, whilst indices can vary
 between constructors [cite:@agda.readthedocs.io p.
-\texttt{language/data-types.html}]. This means the following definition of ~Vec~
-is invalid:
-
-#+begin_src agda2
-data Vec (A : Set) (n : ℕ) : Set where
-  [] : Vec A 0
-  -- 0 ≢ n  -^
-  _\::_ : ∀ {n} → A → Vec A n → Vec A (suc n)
-  -- and suc n ≢ n -------------------^
-#+end_src
+\texttt{language/data-types.html}].
 
 Whilst the value of parameters is constant in the return values of constructors,
 they can vary across the arguments of constructors, even for the same type. One
-example of this is the ~Assertion~ type given in (FIXME: forwardref) later in
-the report. The ~all~ and ~some~ constructors both accept an ~Assertion Σ Γ (t ∷
-Δ)~, but because they return an ~Assertion Σ Γ Δ~ the definition is valid.
+example of this is the ~Assertion~ type given in [[*Hoare Logic Assertions]] later
+in the report. The ~all~ and ~some~ constructors both accept an ~Assertion Σ Γ
+(t ∷ Δ)~, but because they return an ~Assertion Σ Γ Δ~ the definition is valid.
+
+*Propositional equality*. One very important datatype in Agda is propositional
+equality, shown in the following snippet:
+
+#+begin_src agda2
+data _≡_ {A : Set} : A → A → Set where
+  refl : ∀ {x} → x ≡ x
+#+end_src
+
+As the only constructor, ~refl~, requires that the two values are identical,
+whenever there is a term of ~x ≡ y~ then ~x~ and ~y~ have the same value. One
+useful elimination of propositional equality is in the ~subst~ function:
+
+#+begin_src agda2
+subst : (B : A → Set) → x ≡ y → B x → B y
+subst _ refl Bx = Bx
+#+end_src
+
+Given a proof that two values are equal, this function lets you use dependant
+values for one type in place of the other.
 
 *Parameterised modules and records*. Agda modules can accept parameters, which
 can be used anywhere in the module. This works well with Agda's record types,
-are a generalisation of a dependent product. (In fact, the builtin Σ type is
-defined using a record [cite:@agda.readthedocs.io p.
-\texttt{language/built-ins.html}].) The following snippet shows how records can
-be used to define a setoid-enriched monoid:
+whose fields are able to depend on values of other fields. The following snippet
+shows how records can be used to define a monoid:
 
 #+begin_src agda2
-record Monoid ℓ₁ ℓ₂ : Set (ℓsuc (ℓ₁ ⊔ ℓ₂)) where
+record Monoid ℓ : Set (ℓsuc ℓ) where
   infixl 5 _∙_
-  infix 4 _≈_
   field
-    Carrier : Set ℓ₁
-    _≈_     : Rel A ℓ₂
+    Carrier : Set ℓ
     _∙_     : Op₂ Carrier
     ε       : Carrier
-    refl    : ∀ {x} → x ≈ x
-    sym     : ∀ {x y} → x ≈ y → y ≈ x
-    trans   : ∀ {x y z} → x ≈ y → y ≈ z → x ≈ z
-    ∙-cong  : ∀ {x y u v} → x ≈ y → u ≈ v → x ∙ y ≈ u ∙ v
-    ∙-assoc : ∀ {x y z} → (x ∙ y) ∙ z ≈ x ∙ (y ∙ z)
-    ∙-idˡ   : ∀ {x} → ε ∙ x ≈ x
-    ∙-idʳ   : ∀ {x} → x ∙ ε ≈ x
+    ∙-cong  : ∀ {x y u v} → x ≡ y → u ≡ v → x ∙ y ≡ u ∙ v
+    ∙-assoc : ∀ {x y z} → (x ∙ y) ∙ z ≡ x ∙ (y ∙ z)
+    ∙-idˡ   : ∀ {x} → ε ∙ x ≡ x
+    ∙-idʳ   : ∀ {x} → x ∙ ε ≡ x
 #+end_src
 
-This record bundles together an underlying ~Carrier~ type with an equality
-relation ~_≈_~, binary operator ~_∙_~ and identity element ~ε~. It also contains
-all the proofs necessary to show that ~_≈_~ is really an equality and that ~_∙_~
-and ~ε~ form a monoid.
+This record bundles together an underlying ~Carrier~ type with a binary operator
+~_∙_~ and identity element ~ε~. It also contains all the proofs necessary to
+show that ~_∙_~ and ~ε~ form a monoid.
+
+Note that unlike the previous ~Vec~ example, ~Set~ has now been given a
+parameter. This is to encode different universe levels within Agda. As ~Set~ is
+a type within Agda, it must itself have a type. If ~Set~ was within ~Set~, we
+would be subject to a logical inconsistency known as Girard's paradox
+[cite:@cs.cmu.edu/girard-72-thesis]. Thus, ~Set~ has type ~Set 1ℓ~, and ~Set i~
+has type ~Set (ℓsuc i)~.
 
 When a module is parameterised by a ~Monoid~, then the module has an abstract
 monoid. It can use the structure and laws given in the record freely, but it
@@ -590,26 +649,6 @@ explicitly.
 
 * Related Work
 
-# This chapter covers relevant (and typically, recent) research
-# which you build upon (or improve upon). There are two complementary
-# goals for this chapter:
-# \begin{enumerate}
-#   \item to show that you know and understand the state of the art; and
-#   \item to put your work in context
-# \end{enumerate}
-
-# Ideally you can tackle both together by providing a critique of
-# related work, and describing what is insufficient (and how you do
-# better!)
-
-# The related work chapter should usually come either near the front or
-# near the back of the dissertation. The advantage of the former is that
-# you get to build the argument for why your work is important before
-# presenting your solution(s) in later chapters; the advantage of the
-# latter is that don't have to forward reference to your solution too
-# much. The correct choice will depend on what you're writing up, and
-# your own personal preference.
-
 There exist a multitude of formal verification tools designed to describe either
 the semantics of ISA instructions or prove the correctness of algorithms. This
 section describes some of the most significant work in the field and how the
@@ -619,7 +658,7 @@ design of AMPSL improves upon it.
 
 Sail [cite:@10.1145/3290384] is a language for describing the instruction-set
 architecture semantics of processors. It has a syntax similar to the pseudocode
-specification of architectures and a first-order type system with dependent
+specification of most architectures and a first-order type system with dependent
 bitvector and numeric types. It is officially used by
 [cite/t:@riscv/spec-20191213] to specify the concurrent memory semantics of the
 RISC-V architecture.
@@ -629,30 +668,49 @@ concurrency models and theorem-prover definitions. Further, there are tools to
 automatically translate documents from the Arm Specification Language into Sail
 [cite:@10.1145/3290384].
 
-Despite the many advantages of Sail over other solutions, using Sail in this
-project is not suitable for a number of reasons. First is the poor or
-nonexistent documentation of the Sail theorem-proving backends. Trying to decode
-the output of these tools would consume too much of the available time for the
-project.
+Despite the many advantages of Sail over other solutions, including the creation
+of AMPSL, using Sail in this project is not suitable for a number of reasons.
+First is a lack of documentation for the Sail theorem-proving backends. Without
+prior knowledge in using Sail, deciphering the automatically-generated
+statements from Sail would likely consume more time than the creation of AMPSL.
 
 Another reason to avoid Sail is the unnecessary complexity in modelling the ISA
-semantics. Sail attempts to model the full complexity of the semantics,
-particularly in the face of concurrent memory access. This complexity is
-unnecessary for the Arm M-profile architecture, as it has a single thread of
-execution. This makes the semantics much simpler to reason about.
+semantics. One of Sail's highlights is in its description of the memory model of
+architectures. However, this work attempts to verify the functional correctness
+of NTT, an algorithm with very little memory usage. The creation of a simpler
+language like AMPSL removes the need to reason about these complex memory
+interactions and focus on the computation itself.
 
-** ?
-(FIXME: add more related work by following citations.)
+** Other Functional Correctness Tools
+There are a number of existing tools for proving the functional correctness of
+programs. These include tools that target C such as CryptoLine
+[cite:@10.1145/3319535.3354199], Fiat Crypto [cite:@10.1109/SP.2019.00005],
+Frama-C [cite:@10.1007/s00165-014-0326-7] and VST
+[cite:@10.1007/978-3-642-19718-5_1], as well as tools that target assembly
+directly such as Jasmin [cite:@10.1145/3133956.3134078] and Vale
+[cite:@10.1145/3290376].
+
+There are three distinct problems with using these tools to verify the functional
+correctness of the pre-existing NTT implementation for Armv8-M:
+- None of these tools accept assembly as an input language. This means they are
+  unable to verify an existing assembly algorithm.
+- None of these tools target Armv8-M assembly as output. Jasmin and Vale, whilst
+  targeting assembly, do not currently target the Armv8-M architecture, let
+  alone the M-profile vector extension. The other tools target C and require the
+  use of a verified compiler, of which none currently target Armv8-M.
+- Final point?
+
+The most similar tool to what this project is trying to achieve is a formal
+verification tool by [cite:@10.1145/3391900], which targets the REDFIN
+instruction set. REDFIN has much less complex semantics than Armv8-M, to the
+point where the semantics can be expressed directly without the need for a
+specification language.
 
 * Design of AMPSL and its Semantics
-In this chapter I introduce AMPSL, a language mocking the Arm pseudocode. AMPSL
-is defined within Agda, and makes judicious use of Agda's dependent-typing
-features to eliminate assertions and ensure programs cannot fail.
 
-To construct proofs about how AMPSL behaves, it is necessary to describe its
-semantics. This is done through providing a denotational semantics. Denotational
-semantics interpret program expressions and statements as mathematical
-functions, something which Agda is well-suited to do.
+In this chapter I introduce AMPSL, an Agda embedding of ASL. I also describe the
+semantics of AMPSL via a denotational semantics interpreting AMPSL expressions
+and statements as Agda functions
 
 One downside of denotational semantics is that control flow for looping
 constructs is fully evaluated. This is inefficient for loops that undergo many
@@ -663,16 +721,15 @@ implications.
 
 ** AMPSL Syntax
 AMPSL is a language similar to the Armv8-M pseudocode specification language
-written entirely in Agda. Unfortunately, the pseudocode has a number of small
-features that make it difficult to work with in Agda directly. AMPSL makes a
-number of small changes to the pseudocode to better facilitate this embedding,
-typically generalising existing features of the pseudocode.
+written entirely in Agda. Unfortunately, ASL has a number of small features that
+make it difficult to work with in Agda directly. AMPSL makes a number of small
+changes to ASL to better facilitate this embedding, typically generalising
+existing features of ASL.
 
 *** AMPSL Types
 
 #+name: AMPSL-types
-#+caption: The Agda datatype representing the types present in AMPSL. Most have
-#+caption: a direct analogue in the Armv8-M pseudocode specification language
+#+caption: The Agda datatype representing the primitive AMPSL types.
 #+attr_latex: :float t
 #+begin_src agda2
 data Type : Set where
@@ -685,47 +742,42 @@ data Type : Set where
 #+end_src
 
 [[AMPSL-types]] gives the Agda datatype representing the types of AMPSL. Most of
-these have a direct analogue to the pseudocode types. For example, ~bool~ is a
-Boolean, ~int~ mathematical integers, ~real~ is for mathematical real numbers
-and ~array~ constructs array types. Instead of an enumeration construct, AMPSL
-uses the ~fin n~ type, representing a finite set of ~n~ elements. Similarly,
-structs are represented by ~tuple~ types.
+these have a direct analogue to ASL types. For example, ~bool~ is a Boolean,
+~int~ mathematical integers, ~real~ is for mathematical real numbers and ~array~
+constructs array types. Instead of an enumeration construct, AMPSL uses the ~fin
+n~ type, representing a finite set of ~n~ elements. Similarly, structs are
+represented by ~tuple~ types.
 
-The most significant difference between the pseudocode and AMPSL is the
-representation of bitstrings. Whilst the pseudocode has the ~bits~ datatype,
-AMPSL instead treats bitstrings as an array of Booleans.  This removes the
-distinction between arrays and bitstrings, and allows a number of operations to
-be generalised to work on both types. This makes AMPSL more expressive than the
-pseudocode, in the sense that there are a greater number and more concise ways
-to write expressions that are functionally equivalent.
+The most significant difference between ASL and AMPSL is the
+representation of bitstrings. Instead of a bitstring type of ASL, AMPSL uses
+arrays of Booleans. This lets AMPSL generalise a number of ASL operations and
+makes AMPSL more expressive.
 
-The pseudocode implicitly specifies three different properties of types: equality
-comparisons, order comparisons and arithmetic operations. Whilst the types
-satisfying these properties need to be listed explicitly in Agda, using instance
-arguments allows for these proofs to be elided whenever they are required.
+ASL specifies three different properties of types: equality comparisons, order
+comparisons and arithmetic operations. Whilst using any of the relevant
+operations in AMPSL requires a proof that the types have the required property,
+using instance arguments allows for these proofs to be elided in almost all
+cases.
 
 AMPSL has only two differences in types that satisfy these properties compared
-to the pseudocode. First, all array types have equality as long as the
-enumerated type also has equality. This is a natural generalisation of the
-equality between types, and allows for the AMPSL formulation of bitstrings as
-arrays of Booleans to have equality. Secondly, finite sets also have ordering.
-This change is primarily a convenience feature for comparing finite representing
-a subset of integers. As the pseudocode has no ordering comparisons between
-enumerations, this causes no problems for converting pseudocode programs into
-AMPSL.
+to ASL. First, all array types have equality as long as the enumerated type also
+has equality. This is a natural generalisation of the equality between types,
+and allows for the AMPSL formulation of bitstrings as arrays of Booleans to have
+equality. Secondly, finite sets also have ordering.  This change is primarily a
+convenience feature for comparing finite representing a subset of integers. As
+ASL has no ordering comparisons between enumerations, this causes no problems
+for converting pseudocode programs into AMPSL.
 
 The final interesting feature of the types in AMPSL is implicit coercion for
-arithmetic. As pseudocode arithmetic is polymorphic for integers and reals,
-AMPSL needs a function to decide the type of the result. By describing the
-output type as a function on the input types, the same constructor can be used
-for all combinations of numeric inputs.
+arithmetic. As ASL arithmetic is polymorphic for integers and reals, AMPSL needs
+a function to decide the type of the result. By describing the output type as a
+function on the input types, the same constructor can be used for all
+combinations of numeric inputs.
 
 *** AMPSL Expressions
 
 #+name: AMPSL-literalType
-#+caption: Mappings from AMPSL types into Agda types which can be used as
-#+caption: literal values. ~literalTypes~ is a function that returns a product
-#+caption: of the types given in the argument.
+#+caption: Mappings from AMPSL types into Agda types for specifying literals.
 #+begin_src agda
 literalType : Type → Set
 literalType bool        = Bool
@@ -736,21 +788,17 @@ literalType (tuple ts)  = literalTypes ts
 literalType (array t n) = Vec (literalType t) n
 #+end_src
 
-Unlike the pseudocode, where only a few types have literal expressions, every
-type in AMPSL has a literal form. This mapping is part of the ~literalType~
-function, given in [[AMPSL-literalType]]. Most AMPSL literals accept the
-corresponding Agda type as a value. For instance, ~bool~ literals are Agda
-Booleans, and ~array~ literals are fixed-length Agda vectors of the
-corresponding underlying type. The only exception to this rule is for ~real~
-values. As Agda does not have a type representing mathematical reals, integers
-are used instead. This is sufficient as any real value occurring in the
-pseudocode in [cite:@arm/DDI0553B.s] is rational.
-
-# TODO: why is this sufficient?
+Unlike ASL, where only a few types have literal expressions, every type in AMPSL
+has a literal form. This mapping is part of the ~literalType~ function, given in
+[[AMPSL-literalType]]. Most AMPSL literals accept the corresponding Agda type as a
+value. For instance, ~bool~ literals are Agda Booleans, and ~array~ literals are
+fixed-length Agda vectors of the corresponding underlying type. The only
+exception to this rule is for ~real~ values. As Agda does not have a type
+representing mathematical reals, integers are used instead. This is sufficient
+as any real value occurring in the ASL of [cite:@arm/DDI0553B.s] is rational.
 
 #+name: AMPSL-expr-prototypes
-#+caption: Prototypes of the numerous AMPSL program elements. Each one takes two
-#+caption: variable contexts: ~Σ~ for global variables and ~Γ~ for local variables.
+#+caption: Declarations of the Agda embeddings of the AMPSL program elements.
 #+attr_latex: :float t
 #+begin_src agda
 data Expression     (Σ : Vec Type o) (Γ : Vec Type n) : Type → Set
@@ -762,47 +810,76 @@ data Function       (Σ : Vec Type o) (Γ : Vec Type n) (ret : Type) : Set
 data Procedure      (Σ : Vec Type o) (Γ : Vec Type n) : Set
 #+end_src
 
-[[AMPSL-expr-prototypes]] lists the prototypes for the various AMPSL program
-elements, with the full definitions being given in [[*AMPSL Syntax Definition]].
-Each of the AMPSL program element types are parameterised by two variable
-contexts: Σ for global variables and Γ for local variables. The two variable
-contexts are split to simplify the types for function calls and procedure
-invocations. As the set of global variables does not change across a program,
-functions and procedures keep the same value of parameter Σ in their types. As
-functions and procedures have different local variables than the calling
-context, having the local variable context as a separate parameter makes the
-change simple.
+#+name: AMPSL-grammar
+#+caption: Grammar of AMPSL. The formal Agda definition is in
+#+caption: [[*AMPSL Syntax Definition]].
+#+begin_figure
+\begin{align*}
+\mathrm{Natural}\;{}n = & \texttt{0} \mid \texttt{suc}\;{}n \\
+\mathrm{Fin}\;{}i = & \texttt{0F} \mid \texttt{suc}\;{}i \\
+\mathrm{LocalReference}\;{}R = & \texttt{var}\;{}i \mid \\
+& \texttt{[}\;{}R\;{}\texttt{]} \mid \texttt{unbox}\;{}R \mid \texttt{cast eq}\;{}e \\
+& \texttt{merge}\;{}R\;{}R\;{}R \mid \texttt{slice}\;{}R\;{}R \mid \texttt{cut}\;{}R\;{}R \mid \\
+& \texttt{head}\;{}R \mid \texttt{tail}\;{}R \\
+\mathrm{Reference}\;{}r = & \textrm{Like LocalReference} \mid \texttt{state}\;{}i\\
+\mathrm{Expression}\;{}e = & \textrm{Like Reference} \mid \texttt{lit}\;{}x \mid e\;{}\texttt{≟}\;{}e \mid e\;{}\texttt{<?}\;{}e \mid \\
+& \texttt{inv}\;{}e \mid e\;{}\texttt{\&\&}\;{}e \mid e\;{}\texttt{||}\;{}e \mid \texttt{not}\;{}e \mid e\;{}\texttt{and}\;{}e \mid e\;{}\texttt{or}\;{}e \mid \\
+& \texttt{-}\;{}e \mid e\;{}\texttt{+}\;{}e \mid e\;{}\texttt{*}\;{}e \mid e\;{}\texttt{>>}\;{}n \mid e\;{}\texttt{\textasciicircum}\;{}n \mid \texttt{rnd}\;{}e \mid \\
+& \texttt{fin}\;{}f\;{}e \mid \texttt{asInt}\;{}e \mid \\
+& \texttt{nil} \mid \texttt{cons}\;{}e\;{}e \mid \\
+& \texttt{call}\;{}F\;{}es \mid \texttt{if}\;{}e\;{}\texttt{then}\;{}e\;{}\texttt{else}\;{}e \\
+\mathrm{LocalStatement}\;{}S = & \texttt{skip} \mid S\;{}\texttt{∙}\;{}S \mid R\;{}\texttt{≔}\;{}e \mid \\
+& \texttt{declare}\;{}e\;{}S \mid \texttt{for}\;{}n\;{}S \mid \\
+& \texttt{if}\;{}e\;{}\texttt{then}\;{}S \mid \texttt{if}\;{}e\;{}\texttt{then}\;{}S\;{}\texttt{else}\;{}S \\
+\mathrm{Statement}\;{}s = & \textrm{Like LocalStatement} \mid \\
+& r\;{}\texttt{≔}\;{}e \mid \texttt{invoke}\;{}P\;{}es \\
+\mathrm{Function}\;{}F = & \texttt{init}\;{}e\;{}\texttt{∙}\;{}S\;{}\texttt{end} \\
+\mathrm{Procedure}\;{}P = & s\;{}\texttt{∙end}
+\end{align*}
+#+end_figure
 
-An ~Expression~ in AMPSL corresponds with expressions in the pseudocode. Many
-operators are identical to those in the pseudocode (like ~+~, ~*~, ~-~), and
-others are simple renamings (like ~≟~ instead of ~==~ for equality comparisons).
-Unlike the pseudocode, where literals can appear unqualified, AMPSL literals
-are introduced by the ~lit~ constructor.
+[[AMPSL-expr-prototypes]] lists the declarations of the Agda data types
+corresponding to the AMPSL program elements. A summary of the grammar is in
+[[AMPSL-grammar]] with the full definitions being given in [[*AMPSL Syntax
+Definition]].  Each type is parameterised by two variable contexts: Σ for global
+variables and Γ for local variables. The two variable contexts are split to
+simplify the types for function calls and procedure invocations. As the set of
+global variables does not change across a program, functions and procedures keep
+the same value of parameter Σ in their types. As functions and procedures have
+different local variables than the calling context, having the local variable
+context as a separate parameter makes the change simple.
 
-The most immediate change for programming in AMPSL versus the pseudocode is how
-variables are handled. Because the ~Expression~ type carries fixed-length
-vectors listing the AMPSL types of variables, a variable is referred to by its
-index into the context. For example, a variable context \(\{x \mapsto
-\mathrm{int}, y \mapsto \mathrm{real}\}\) is represented in AMPSL as the context
-~int ∷ real ∷ []~. The variable \(x\) is then represented by ~var 0F~ in AMPSL.
-Because the global and local variable contexts are disjoint for the ~Expression~
-type, variables are constructed using ~state~ or ~var~ respectively.
+An ~Expression~ in AMPSL corresponds to expressions in ASL. Many operators are
+identical to those in ASL (like ~+~, ~*~, ~-~), and others are simple renamings
+(like ~≟~ instead of ~==~ for equality comparisons).  Unlike ASL, where literals
+can appear unqualified, AMPSL literals are introduced by the ~lit~ constructor.
 
-Whilst this decision introduces much complexity to programming using AMPSL, it
-greatly simplifies the language for use in constructing proofs. It is also a
-technique used in the internal representation of many compilers (FIXME: cite).
+The most immediate change for programming in AMPSL versus ASL is how variables
+are handled. Because the ~Expression~ type carries fixed-length vectors listing
+the AMPSL types of variables, a variable is referred to by its index into the
+context. For example, a variable context \(\{x \mapsto \mathrm{int}, y \mapsto
+\mathrm{real}\}\) is represented in AMPSL as the context ~int ∷ real ∷ []~. The
+variable \(x\) is then represented by ~var 0F~ in AMPSL, where the ~F~ indicates
+the index is from a finite set.  Because the global and local variable contexts
+are disjoint for the ~Expression~ type, variables are constructed using ~state~
+or ~var~ respectively.
 
-AMPSL expressions also add a number of useful constructs to the pseudocode type.
-One such pair is ~[_]~ and ~unbox~, which construct and destruct an array of
-length one respectively. Others are ~fin~, which allows for arbitrary
-computations on elements of finite sets, and ~asInt~, which converts a finite
-value into an integer.
+Whilst this decision makes programming using AMPSL more complex, it
+greatly simplifies the language for use in constructing proofs. This method of
+referring to variables by an index over a name is also commonly used in compiler
+construction.
+
+AMPSL expressions also add a number of useful constructs to ASL.  One such pair
+is ~[_]~ and ~unbox~, which construct and destruct an array of length one
+respectively. Others are ~fin~, which allows for arbitrary computations on
+elements of finite sets, and ~asInt~, which converts a finite value into an
+integer.
 
 The final three AMPSL operators of note are ~merge~, ~slice~ and ~cut~. These
 all perform operations on arrays, by either merging two together, taking out a
-slice, or cutting out a slice. Unlike the pseudocode where bitstring slicing
-requires a range, these three operators use Agda's dependent types and type
-inference so that only a base offset is necessary.
+slice, or cutting out a slice. Unlike ASL where bitstring slicing requires a
+range, these three operators use Agda's dependent types and type inference so
+that only a base offset is necessary.
 
 ~slice xs i~, like bitstring slicing, extracts a contiguous subset of values
 from an array ~xs~, such that the first element in ~slice xs i~ is in ~xs~ at
@@ -810,43 +887,36 @@ position ~i~. ~cut xs i~ returns the remainder of ~slice xs i~; the two ends of
 ~xs~ not in the slice, concatenated. Finally, ~merge xs ys i~ joins ~xs~ and
 ~ys~ to form a product-projection triple.
 
-The ~Reference~ type is the name AMPSL gives to assignable expressions from the
-pseudocode. The ~LocalReference~ type is identical to ~Reference~, except it
-does not include global variables. Due to complications to the semantics of
-multiple assignments to one location, "product" operations like ~merge~ and
+The ~Reference~ type is the name AMPSL gives to assignable expressions from ASL.
+The ~LocalReference~ type is identical to ~Reference~, except it does not
+include global variables. Due to complications in the semantics of multiple
+assignments to one location, \ldquo{}product\rdquo operations like ~merge~ and
 ~cons~ are excluded from being references, despite concatenated bitstrings and
-tuples being assignable expressions in the pseudocode. Whilst
-[cite:@arm/DDI0553B.s §E1.3.3] requires that no position in a bitstring is
-referenced twice, enforcing this in AMPSL for ~merge~ and ~cons~ would make
-their use unergonomic in practice for writing code or proofs.
-
-(FIXME: necessary?) In an earlier form of AMPSL, instead of separate types for
-assignable expressions which can and cannot assign to state, there were two
-predicates. However, this required carrying around a proof that the predicate
-holds with each assignment. Whilst the impacts on performance were unmeasured,
-it made proving statements with assignable expressions significantly more
-difficult. Thankfully, Agda is able to resolve overloaded data type constructors
-without much difficulty, meaning the use of ~Reference~ and ~LocalReference~ in
-AMPSL programs is transparent.
+tuples being assignable expressions in ASL. Whilst [cite:@arm/DDI0553B.s
+§E1.3.3] requires that no position in a bitstring is referenced twice, enforcing
+this in AMPSL for ~merge~ and ~cons~ would make their use unergonomic in
+practice for writing code or proofs.
 
 **** Example AMPSL Expressions
-One arithmetic operator used in the pseudocode is left shift.
-[cite:@arm/DDI0553B.s §E1.3.4] explains how this can be encoded using other
-arithmetic operators in AMPSL, as shown below:
+One arithmetic operator used in ASL is left shift.  [cite:@arm/DDI0553B.s
+§E1.3.4] explains how this can be encoded using other arithmetic operators in
+AMPSL, as shown below:
 
 #+begin_src agda2
 _<<_ : Expression Σ Γ int → (n : ℕ) → Expression Σ Γ int
 e << n = e * lit (ℤ.+ (2 ℕ.^ n))
 #+end_src
 
-This simple-looking expression has a lot of hidden complexity. First, consider
-the type of the literal statement. The unary plus operation tells us that the
-literal is an Agda integer. However, there are two AMPSL types with Agda
-integers for literal values: ~int~ and ~real~. How does Agda correctly infer the
-type? Recall that multiplication is polymorphic in AMPSL, with the result type
-determined by implicit coercion. Agda knows that the multiplication must return
-an ~int~, and that the first argument is also an ~int~, so it can infer that the
-second multiplicand is an integer literal.
+There is a lot of hidden complexity here. First, consider the type of the
+literal statement. The unary plus operation tells us that the literal is an Agda
+integer. However, there are two AMPSL types with Agda integers for literal
+values: ~int~ and ~real~.
+
+How does Agda correctly infer the type? Recall that
+multiplication is polymorphic in AMPSL, with the result type determined by
+implicit coercion. Agda knows that the multiplication must return an ~int~, and
+that the first argument is also an ~int~, so it can infer that the second
+multiplicand is an integer literal.
 
 Another pseudocode operation not yet described in AMPSL is integer slicing. Here
 is an expression that slices a single bit from an integer, following the
@@ -865,60 +935,63 @@ positive. If the modulus is less than \(2^i\), then the bit in the two's
 complement representation of ~x~ is ~0~, otherwise it is ~1~.
 
 *** AMPSL Statements
-Most of the statements that are present in AMPSL are unsurprising. The ~skip~
-and sequencing (~_∙_~) statements should be familiar from the discussion on
-Hoare logic, the assignment statement (~_≔_~) assigns a value into a reference,
-the ~invoke~ statement calls a procedure and the ~if_then_else_~ statement
-starts a conditional block.
+Most statements in AMPSL are straight forward. The ~skip~ and sequencing (~_∙_~)
+statements are familiar from the discussion on Hoare logic; the assignment
+statement (~_≔_~) assigns a value into a reference; the ~invoke~ statement calls
+a procedure; and the ~if_then_else_~ statement starts a conditional block.
 
 Given that AMPSL has a ~skip~ statement and an ~if_then_else_~ control-flow
-structure, including the ~if_then_~ statement may appear redundant. Ultimately,
-the statement is redundant. It is regardless included in AMPSL for two reasons.
-The first is ergonomics. ~if_then_~ statements appear many times more often in
-the pseudocode than ~if_then_else_~ statements such that omitting it would only
-serve to complicate the code. The other reason is that including an ~if_then_~
-statement makes the behaviour of a number of functions that manipulate AMPSL
-code much easier to reason about.
+structure, including the ~if_then_~ statement is redundant. It is included in
+AMPSL for two reasons.  The first is ergonomics. ~if_then_~ statements appear
+many times more often in ASL than ~if_then_else_~ statements such that omitting
+it would only serve to complicate embedded code. The other reason is that
+including an ~if_then_~ statement makes the behaviour of a number of functions
+that manipulate AMPSL code much easier to reason about.
 
 The form of variable declarations is significantly different in AMPSL than it is
-in the pseudocode. As variables in AMPSL are accessed by index into the variable
-context instead of by name, AMPSL variable declarations do not need a name. In
-addition, Agda can often infer the type of a declared variable from the context
-in which it is used, making type annotations unnecessary. The last and most
-significant difference is that all variables in AMPSL must be initialised. This
-simplifies the semantics of AMPSL greatly, and prevents the use of uninitialised
-variables.
+in ASL. As variables in AMPSL are accessed by index into the variable context
+instead of by name, AMPSL variable declarations do not need a name. In addition,
+Agda can often infer the type of a declared variable from the context in which
+it is used, making type annotations unnecessary. The last and most significant
+difference is that all variables in AMPSL must be initialised. This simplifies
+the semantics of AMPSL greatly, and prevents the use of uninitialised variables.
 
 AMPSL makes a small modification to ~for~ loops that greatly improve the type
-safety over what is achieved by the pseudocode. Instead of looping over a range
-of dynamic values [cite:@arm/DDI0553B.s §E1.4.4], AMPSL loops perform a static
-number of iterations, determined by an Agda natural ~n~. Then, instead of the
-loop variable being an assignable integer expression, AMPSL introduces a new
-variable with type ~fin n~.
+safety over what is achieved by ASL. Instead of looping over a range of dynamic
+values [cite:@arm/DDI0553B.s §E1.4.4], AMPSL loops perform a static number of
+iterations, determined by an Agda natural ~n~. Then, instead of the loop
+variable being an assignable integer expression, AMPSL introduces a new variable
+with type ~fin n~.
 
-There are three statement forms from the pseudocode that AMPSL omits. These are
-~while...do~ loops, ~repeat...until~ loops and ~try...catch~ exception handling.
-Including these three statements would greatly complicate the denotational
-encoding of AMPSL, by removing termination guarantees and requiring a monadic
-transformation for the loops and exceptions, respectively.
+There are three ASL statement forms that AMPSL omits. These are ~while...do~
+loops, ~repeat...until~ loops and ~try...catch~ exception handling.  Including
+these three statements would greatly complicate the denotational encoding of
+AMPSL, by removing termination guarantees and requiring a monadic transformation
+for the loops and exceptions, respectively.
 
-Thankfully, these three structures are not a vital part of the pseudocode, each
-either having a functional alternative [cite:@arm/DDI0553B.s §E2.1.166] or
-forming part of internal processor bookkeeping [cite:@arm/DDI0553B.s §E2.1.397],
+Thankfully, these three structures are not a vital part of ASL, each either
+having a functional alternative [cite:@arm/DDI0553B.s §E2.1.166] or forming part
+of internal processor bookkeeping [cite:@arm/DDI0553B.s §E2.1.397],
 [cite:@arm/DDI0553B.s §E2.1.366]. Hence their omission from AMPSL is not a
 significant loss.
 
-AMPSL has a ~LocalStatement~ type as well as a ~Statement~ type. Whilst
-~Statement~ can assign values into any ~Reference~, a ~LocalStatement~ can only
-assign values into a ~LocalReference~. This means that ~LocalStatement~ cannot
-modify global state, only local state.
+To encode effectless functions, AMPSL has a ~LocalStatement~ type as well as a
+~Statement~ type. Whilst ~Statement~ can assign values into any ~Reference~, a
+~LocalStatement~ can only assign values into a ~LocalReference~. This means that
+~LocalStatement~ cannot modify global state, only local state.
 
 **** Example AMPSL Statements
 Here is a statement that copies elements from ~y~ into ~x~ if the corresponding
 entry in ~mask~ is true:
 
+# FIXME: compare with ASL
 #+begin_src agda2
-copyMasked : Statement Σ (array t n ∷ array t n ∷ array bool n ∷ [])
+copyMasked :
+  Statement Σ
+    ( array t n
+    ∷ array t n
+    ∷ array bool n
+    ∷ [])
 copyMasked =
   for n (
     let i = var 0F in
@@ -928,7 +1001,7 @@ copyMasked =
 
     if index mask i ≟ true
     then
-        *index x i ≔ index y i
+        ,*index x i ≔ index y i
   )
 #+end_src
 
@@ -940,6 +1013,7 @@ Unfortunately, if the ~if_then_~ statement declared a new variable, these naming
 variables would become useless, as the types would be different. For example
 consider the following snippet:
 
+# FIXME: compare with ASL
 #+begin_src agda2
 VPTAdvance : Statement State (beat ∷ [])
 VPTAdvance =
@@ -963,25 +1037,26 @@ VPTAdvance =
         cons vptState (cons i nil) ≔ call (LSL-C 0) (! vptState ∷ []) ∙
         if ! i
         then
-          *elem 4 VPR-P0 beat ≔ not (elem 4 (! VPR-P0) beat))) ∙
+          ,*elem 4 VPR-P0 beat ≔ not (elem 4 (! VPR-P0) beat))) ∙
     if getBit 0 (asInt beat)
     then
-      *elem 4 VPR-mask maskId ≔ ! vptState))
+      ,*elem 4 VPR-mask maskId ≔ ! vptState))
 #+end_src
 
 This corresponds to the ~VPTAdvance~ procedure by [cite/t:@arm/DDI0553B.s
-§E2.1.424] (FIXME: why?). Notice how every time a new variable is introduced,
-the variable names have to be restated. Whilst this is a barrier when trying to
+§E2.1.424], which is used in the AMPSL model for Barrett reduction discussed in
+[[*Using AMPSL for Proofs]]. Notice how every time a new variable is introduced, the
+variable names have to be restated. Whilst this is a barrier when trying to
 write programs in AMPSL, the type-safety guarantees and simplified proofs over
 using named variables more than make up the difference.
 
 *** AMPSL Functions and Procedures
-Much like how a procedure in the pseudocode is a wrapper around a block of
-statements, ~Procedure~ in AMPSL is a wrapper around ~Statement~. Note that
-AMPSL procedures only have one exit point, the end of a statement, unlike the
-pseudocode which has ~return~ statements. Any procedure using a ~return~
-statement can be transformed into one that does not by a simple refactoring, so
-AMPSL does not lose any expressive power over the pseudocode.
+Much like how a procedure in ASL is a wrapper around a block of statements,
+~Procedure~ in AMPSL is a wrapper around ~Statement~. Note that AMPSL procedures
+only have one exit point, the end of a statement, unlike ASL which has ~return~
+statements. Any procedure using a ~return~ statement can be transformed into one
+that does not by a simple refactoring, so AMPSL does not lose any expressive
+power over ASL.
 
 AMPSL functions are more complex than procedures. A function consists of a pair
 of an ~Expression~ and ~LocalStatement~. The statement has the function
@@ -995,13 +1070,14 @@ found in [[*Example AMPSL Statements]]. This is a simple function that converts 
 bitstring to an unsigned or signed integer, depending on whether the second
 argument is true or false:
 
+# FIXME: compare with ASL
 #+begin_src agda2
-Int : Function State (bits n ∷ bool ∷ []) int
+Int : Function Σ (bits n ∷ bool ∷ []) int
 Int =
   init
     if var 1F
-    then uint (var 0F)
-    else sint (var 0F) ∙
+    then call uint (var 0F ∷ [])
+    else call sint (var 0F ∷ []) ∙
     skip
   end
 #+end_src
@@ -1012,40 +1088,43 @@ initial value of the return variable is a simple conditional statement, calling
 ~uint~ or ~sint~ on the first argument as appropriate. Many functions that are
 easy to inline have this form.
 
-(FIXME: make uint an example)
-# The ~GetCurInstBeat~ function by [cite/t:@arm/DDI0553B.s §E2.1.185] is one
-# function that benefits from the unusual representation of functions. A
-# simplified AMPSL version is given below.
+The next example shows the ~uint~ function, which converts a bitstring into an
+unsigned integer.
 
-# #+begin_src agda2
-# GetCurInstrBeat : Function State [] (tuple (beat ∷ elmtMask ∷ []))
-# GetCurInstrBeat =
-#   init
-#     tup (! BeatId ∷ lit (Vec.replicate true) ∷ []) ∙ (
-#       let outA = head (var 0F) in
-#       let outB = head (tail (var 0F)) in
-#       if call VPTActive (! BeatId ∷ [])
-#       then
-#         outB ≔ !! outB and elem 4 (! VPR-P0) outA
-#     )
-#   end
-# #+end_src
+# FIXME: add pseudocode equivalent
+#+begin_src agda2
+uint : Function Σ (bits n ∷ []) int
+uint {n = 0}     = init lit 0ℤ ∙ skip end
+uint {n = suc n} =
+  init
+    lit 0ℤ ∙
+    declare (lit 1ℤ) (
+    for (suc m) (
+      let x = var 3F in
+      let ret = var 2F in
+      let scale = var 1F in
+      let i = var 0F in
+      if index x i
+      then (
+        ret ≔ !! ret + !! scale
+      ) ∙
+      scale ≔ lit (ℤ.+ 2) * !! scale
+    ))
+  end
+#+end_src
 
-# The function initialises a default return value, and then modifies it based on
-# the current state of execution. This is easy to encode in the AMPSL function
-# syntax. The return variable is initialised to the default value, and the
-# function body performs the necessary manipulations.
+The AMSPL function has two forms, depending on the number of input bits. If
+the input is a zero-length bitstring, then its integer value is zero. Otherwise,
+we iterate through the bits in turn, adding the place value of a bit into the
+return value whenever that bit is true.
 
-In this way a function is much like a ~declare~ statement. However, instead of
-discarding the declared variable when it leaves scope, a function returns it to
-the caller.
+This example highlights the similarities between functions and ~declare~
+statements. We declare a local accumulator variable with initial value zero. We
+then use it in some further computation. The only difference is the action when
+leaving scope. A declare statement would simply discard the local variable. This
+function instead returns that value.
 
 ** AMPSL Semantics
-So far we have discussed the syntactic form of AMPSL, showing how it is similar
-to the Arm pseudocode. We have also given a brief high-level semantics of AMPSL.
-Formal verification requires a much more detailed description of the semantics
-than what has been given so far.
-
 This section starts with a brief discussion of how to model AMPSL types. This
 addresses the burning question of how to model real numbers in Agda.  From this,
 we discuss the denotational semantics of AMPSL, and how AMPSL program elements
@@ -1055,8 +1134,8 @@ syntax-directed proofs of statements.
 
 *** AMPSL Datatype Models
 #+name: AMPSL-type-models
-#+caption: The semantic encoding of AMPSL data types. The use of ~Lift~ is to
-#+caption: ensure all the encodings occupy the same Agda universe level.
+#+caption: The semantic encoding of AMPSL data types. I use ~Lift~ is to ensure
+#+caption: all the encodings occupy the same Agda universe level.
 #+begin_src agda2
 ⟦_⟧ₜ  : Type → Set ℓ
 ⟦_⟧ₜₛ : Vec Type n → Set ℓ
@@ -1086,8 +1165,6 @@ standard library does not have a dependent n-ary product type. In any case, the
 Agda type checker would not accept its usage in this case due to termination
 checking, hence the manual inductive definition.
 
-(ALTERNATIVE 1: ~int~ stays as abstract discrete ordered commutative ring)
-
 The other two AMPSL types are ~int~, ~real~. Whilst ~int~ could feasibly be
 encoded by the Agda integer type, there is no useful Agda encoding for
 mathematical real numbers. Because of this, both numeric types are represented
@@ -1099,20 +1176,11 @@ homomorphism, but it must preserve \(\le\) ordering and satisfy the floor
 property:
 
 \[
-\forall x y. x < y \mathtt{/1} \implies ⌊ x ⌋ < y
+\forall x y.\;x < y \mathtt{/1} \implies ⌊ x ⌋ < y
 \]
 
-(ALTERNATIVE 2: ~real~ becomes rational.)
-
-The other two AMPSL types are ~int~ and ~real~. ~int~ is encoded by the Agda
-integer type. However, there is no useful Agda encoding for mathematical real
-numbers. This can be approximated using the Agda rational type ℚ. Whilst this
-clearly cannot encode all real numbers, it satisfies nearly all of the
-properties required by the pseudocode real-number type. The only missing
-operation is square-root, which is unnecessary for the proofs AMPSL is designed
-for.
-
-(END ALTERNATIVES)
+~/1~ represents the usual embedding of integers into real numbers, by division
+by one. ~⌊_⌋~ represents the floor function.
 
 *** Denotational Semantics
 
@@ -1170,12 +1238,13 @@ assign    : Reference Σ Γ t      → ⟦ t ⟧ₜ → ⟦ Σ ⟧ₜₛ × ⟦ 
 locAssign : LocalReference Σ Γ t → ⟦ t ⟧ₜ → ⟦ Σ ⟧ₜₛ × ⟦ Γ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ
 #+end_src
 
-Before considering statements as a whole, we start with assignment statements.
-If assignments were only into variables, this would be a trivial update to the
-relevant part of the context. However, the use of ~Reference~ makes things more
-tricky. Broadly speaking, there are three types of ~Reference~: terminal
-references like ~state~ and ~var~; isomorphism operations like ~unbox~, ~[_]~
-and ~cast~; and projection operations like ~slice~, ~cut~, ~head~ and ~tail~.
+We first describe assignment statements before discussing the other forms. If
+assignments were only into variables, this would be a trivial update to the
+relevant part of the context. However, the use of ~Reference~, in attempt for
+AMPSL to keep the same form as ASL, makes things more tricky. Broadly speaking,
+there are three types of ~Reference~: terminal references like ~state~ and
+~var~; isomorphism operations like ~unbox~, ~[_]~ and ~cast~; and projection
+operations like ~slice~, ~cut~, ~head~ and ~tail~.
 
 We will consider how to update each of the three types of references in turn,
 which is the action performed by helper functions ~assign~ and ~locAssign~, the
@@ -1197,7 +1266,7 @@ leaf reference.
 
 This interpretation of slice as a projection reference type is a large part of
 the reason why AMPSL has ~merge~, ~cut~ and ~slice~ instead of the bitstring
-concatenation and slicing present in the pseudocode. There is no way to form a
+concatenation and slicing present in ASL. There is no way to form a
 product-projection triple with only bitstring joining and slicing, so any
 denotational semantics with these operations would require merge and cut
 operations on the encoding of values.  AMPSL takes these semantic necessities
@@ -1221,11 +1290,11 @@ added to the variable context. After evaluating the subsequent statement, the
 final value of the new variable is stripped away from the context.
 
 The only looping construct in AMPSL is the ~for~ loop. Because it performs a
-fixed number of iterations, it too has easy-to-implement denotational semantics.
-This is because it is effectively a fixed number of ~declare~ statements all
-sequenced together. This is also one of the primary reasons why the denotational
-semantics can have poor computational performance; every iteration of the ~for~
-loop must be evaluated individually.
+fixed number of iterations, it too has a straight-forward denotational
+semantics.  This is because it is effectively a fixed number of ~declare~
+statements all sequenced together. This is also one of the primary reasons why
+the denotational semantics can have poor computational performance; every
+iteration of the ~for~ loop must be evaluated individually.
 
 ~stmt~ and ~locStmt~ return the full context and only the local variables
 respectively. This is because only ~Statement~ can include ~Reference~ which can
@@ -1284,17 +1353,17 @@ f =
 Consider the expression ~e = call f [ x ]~ of type ~Expression [ bool ] Γ int~.
 There are three important aspects we need to consider for converting ~e~ into a
 term: the initial conversion; substitution of variables; and the semantics.
-(FIXME: why?)
 
 The simplest conversion is to keep the function call as-is, and simply
 recursively convert ~x~ into a term. This would result in a term ~e′ = call f [
 x′ ]~, using ~′~ to indicate this term embedding function.
 
-What would happen when we try and substitute ~state 0F~ for ~t~, a term
-involving local variables in ~Γ~, into ~e′~? As ~f~ refers to ~state 0F~, it
-must be modified in some way. However, ~Γ~ is a different variable context from
-~[ int ]~, so there is no way of writing ~t~ inside of ~f~. This embedding is
-not sufficient.
+Unfortunately this embedding has problems with substitution. Consider attempting
+to substitute a term ~t~, which depends on local variables in ~Γ~, for the
+reference ~state 0F~ inside of ~e′~. As ~f~ refers to ~state 0F~, it must be
+modified in some way. However, ~Γ~ is a different variable context from ~[ int
+]~, so there is no way of writing ~t~ inside of ~f~. This embedding is not
+sufficient.
 
 A working solution comes from the insight that a ~Function~ in AMPSL can only
 read from global variables, and never write to them. Instead of thinking of ~f~
@@ -1354,7 +1423,7 @@ provides existential quantification.
 
 Semantically, an assertion is a predicate on the current state of execution. For
 AMPSL, this state is the current global, local and auxiliary variable contexts.
-As is usual in Agda, the predicates are encoded as an indexed family of sets.
+The predicates are encoded as an indexed family of sets.
 
 The Boolean connectives are represented by their usual type-theoretic
 counterparts: the unit type for ~true~, the empty type for ~false~, product
@@ -1372,14 +1441,6 @@ The final ~Assertion~ form to consider is ~pred~. This first evaluates the
 associated Boolean term. If true, the semantics returns the unit type.
 Otherwise, it returns the empty type.
 
-(FIXME: necessary?)
-For a language where value equality can
-have many different values, some readers may feel like reducing those equalities
-to a binary result loses information. Providing this information to the user
-would require a way to convert Boolean-valued terms into a normal form,
-with an inequality operator at the root. This conversion would be highly
-non-trivial, especially due to the presence of function calls in terms.
-
 Fortunately, all equalities and inequalities between AMPSL values are decidable,
 either by construction of the type for Booleans and finite sets, or by
 specification for integers and real numbers. This allows the user to extract
@@ -1394,9 +1455,10 @@ next. This allows for purely syntax-directed proofs for any choice of
 precondition and postcondition.
 
 #+name: AMPSL-Hoare-logic
-#+caption: The Hoare logic correctness triples for AMPSL. This combines the
-#+caption: structural and adaptation rules you would find in traditional
-#+caption: renderings of Hoare logic into a single set of structural rules.
+#+caption: The Hoare logic correctness triples for AMPSL. The unusual argument
+#+caption: order to ~HoareTriple~ allows for different constructors for the
+#+caption: different statement forms whilst requiring that ~HoareTriple~ is
+#+caption: defined for every precondition and postcondition.
 #+begin_src agda2
 data HoareTriple (P : Assertion Σ Γ Δ) (Q : Assertion Σ Γ Δ) :
                  Statement Σ Γ → Set (ℓsuc ℓ) where
@@ -1464,11 +1526,11 @@ rule for AMPSL. A purely structural rule would have ~subst Q ref (↓ val)~ as t
 precondition of the statement. AMPSL combines this with the rule of consequence
 to allow for an arbitrary precondition.
 
-The other Hoare logic rules for AMPSL are decidedly less simple. Most of the
-added complexity is a consequence of AMPSL's type safety. For example, whilst it
-is trivial to add a free variable to an assertion on paper, doing so in a
-type-safe way for the ~Assertion~ type requires constructing a whole new Agda
-term, as the variable context forms part of the type.
+The other Hoare logic rules for AMPSL are less simple. Most of the added
+complexity is a consequence of AMPSL's type safety. For example, whilst it is
+trivial to add a free variable to an assertion on paper, doing so in a type-safe
+way for the ~Assertion~ type requires constructing a whole new Agda term, as the
+variable context forms part of the type.
 
 The ~declare~ rule is the simplest of the three remaining. The goal is to
 describe a necessary triple on ~s~ such that ~HoareTriple P Q (declare e s)~ is
@@ -1531,14 +1593,7 @@ procedure body are initially set to the invocation arguments. Like ~P~ and ~Q~,
 the local variables in ~es~ have to be replaced with the corresponding auxiliary
 variables. This substitution is done by ~termVarsToMetas~.
 
-Example uses of these rules, particularly ~invoke~ and ~for~, are given in
-(FIXME: forward reference).
-
 * Properties and Evaluation of AMPSL
-
-# For any practical projects, you should almost certainly have some kind
-# of evaluation, and it's often useful to separate this out into its own
-# chapter.
 
 This chapter has two major concerns. The first is to prove that AMPSL's Hoare
 logic is sound with respect to the denotational semantics. If the logic is not
@@ -1546,17 +1601,16 @@ sound, it is unsuitable for use in proofs. I will also discuss what steps need
 to be taken to show a restricted form of completeness for AMPSL.
 
 The other half of this chapter will give a practical example of using AMPSL to
-prove a proposition. I will give the AMPSL encoding of the pseudocode form of
-the Barrett reduction algorithm given by
-[cite/t:@10.46586/tches.v2022.i1.482-505]. I will demonstrate how this works on
-some concrete values, and explain what work is left to be done to prove a more
-general statement.
+prove a proposition. I will give the AMPSL encoding of ASL form of the Barrett
+reduction algorithm given by [cite/t:@10.46586/tches.v2022.i1.482-505]. I will
+demonstrate how this works on some concrete values, and explain what work is
+left to be done to prove a more general statement.
 
 ** Soundness of AMPSL's Hoare Logic
 
 #+name: AMPSL-soundness-statement
-#+caption: The Adga type defining soundness of AMPSL's Hoare Logic. If there is
-#+caption: a correctness triple \(\{P\}\;\texttt{s}\;\{Q\}\) then for any
+#+caption: The theorem statement for soundness of AMPSL's Hoare Logic. If there
+#+caption: is a correctness triple \(\{P\}\;\texttt{s}\;\{Q\}\) then for any
 #+caption: variable contexts σ, γ and δ, a proof that \(P\) holds initially
 #+caption: implies that \(Q\) holds after executing \texttt{s} on the global and
 #+caption: local variable contexts.
@@ -1569,9 +1623,8 @@ sound : P ⊢ s ⊢ Q →
           δ
 #+end_src
 
-To prove that AMPSL's Hoare logic is sound, we first need to define what is
-meant by soundness. [[AMPSL-soundness-statement]] shows the Agda type corresponding
-to the proposition.
+I first define what is meant by soundness. [[AMPSL-soundness-statement]] shows the
+Agda type corresponding to the proposition.
 
 #+begin_theorem
 Given a Hoare logic proof that \(\{P\}\;\texttt{s}\;\{Q\}\) holds, then for any
@@ -1655,7 +1708,7 @@ in" the new variable, wrapped in a type cast to satisfy Agda's dependant typing.
 
 Proving that the term manipulations are indeed homomorphisms in the semantics
 also requires fewer lines than the 320 naive cases. Like with the manipulation
-definitions, the proofs only need to given for the ~state~, ~var~ and ~meta~
+definitions, the proofs only need to be given for the ~state~, ~var~ and ~meta~
 cases. However, it is not enough for a proof to simply show that the ~state~
 ~var~ and ~meta~ cases are homomorphisms. The proof must also state how to
 extend or reduce the variable contexts to the correct form.
@@ -1711,13 +1764,13 @@ roughly 800 lines remaining that would be difficult to reduce further.
 
 Assertion manipulations have a similar amount of repetition as term
 manipulations. However, there are two important differences that make a generic
-recursion scheme unnecessarily complex. First, the ~Assertion~ type has fewer
-constructors, totalling nine instead of 32. Whilst homomorphisms
-will still feature a bunch of boilerplate, it occurs at a much lower ratio
-compared to the amount of useful code. The second reason is that the ~all~ and
-~some~ constructors introduce new auxiliary variables. This means that the
-subterms of these constructors have a different type from other assertions,
-making a generic solution much more complex.
+builder pattern unnecessarily complex. First, the ~Assertion~ type has fewer
+constructors, totalling nine instead of 32. Whilst homomorphisms will still
+feature a bunch of boilerplate, it occurs at a much lower ratio compared to the
+amount of useful code. The second reason is that the ~all~ and ~some~
+constructors introduce new auxiliary variables. This means that the subterms of
+these constructors have a different type from other assertions, making a generic
+solution much more complex.
 
 Proofs that assertion manipulations are homomorphisms are also fundamentally
 different that those for term homomorphisms. Whilst the denotational semantics
@@ -1733,11 +1786,11 @@ using the resulting propositional equality to safely return the input term.
 
 *** Soundness of ~declare~, ~for~ and ~invoke~
 Referring back to [[AMPSL-Hoare-logic]] for the Hoare logic definitions, we can now
-prove soundness for the other rules. The ~declare~ rule is quite simple. First,
-we create a proof that the weakened precondition holds, and add to it a proof
-that the additional variable is indeed the initial value of the newly-declared
-variable. Then we recursively apply the soundness proof, to obtain a proof that
-the weakened post-condition holds. Finally, we apply the weakening proof for
+prove soundness for the other rules. The ~declare~ rule is straight forward.
+First, I prove that the weakened precondition holds, and add to it a proof that
+the additional variable is indeed the initial value of the newly-declared
+variable. Then we inductively apply soundness, to obtain a proof that the
+weakened post-condition holds. Finally, I apply the weakening proof for
 ~Assertion~ in reverse, obtaining a proof that the postcondition holds.
 
 The proof for ~for~ is much more involved, and only an outline will be given. I
@@ -1794,8 +1847,8 @@ representation of an assertion, there is no algorithm to decide the assertion
 given the predicate, due to the ~Set~ type in Agda not being a data type.
 
 Due to this, any statement about correctness must be given the precondition and
-postcondition assertions explicitly. This results in the following Agda type for
-the most general proof of correctness:
+postcondition assertions explicitly. This results in the following theorem
+statement for the most general proof of correctness:
 
 #+begin_src agda2
 -- impossible to prove
@@ -1807,11 +1860,11 @@ correct : (∀ σ γ δ →
           P ⊢ s ⊢ Q
 #+end_src
 
-Unfortunately this is formulation also very quickly runs into a problem in Agda.
-Consider the statement ~s ∙ s₁~. To prove this in AMPSL's Hoare logic, we need
-to give two subproofs: ~P ⊢ s ⊢ R~ and ~R ⊢ s₁ ⊢ Q~. As input, we have a single
-function transforming proofs of the precondition to proofs of the postcondition.
-The problem occurs because there is no way to decompose this function into two
+Unfortunately this also very quickly causes a problem in Agda.  Consider the
+statement ~s ∙ s₁~. To prove this in AMPSL's Hoare logic, we need to give two
+subproofs: ~P ⊢ s ⊢ R~ and ~R ⊢ s₁ ⊢ Q~. As input, we have a single function
+transforming proofs of the precondition to proofs of the postcondition.  The
+problem occurs because there is no way to decompose this function into two
 parts, one for the first statement and another for the second.
 
 To resolve this, I anticipate that proving correctness in AMPSL's Hoare logic
@@ -1827,11 +1880,11 @@ will require the following steps:
    logic rules.
 
 The first three steps form the definition of the weakest precondition for an
-assertion: step one asserts that such an assertion exists for all statements
-and assertions; step two asserts that the assertion is indeed a valid
-precondition for the choice of statement and postcondition; and step three
-asserts that any other precondition for ~s~ that derives ~Q~ must entail the
-weakest precondition.
+assertion [cite:@10.1145/360933.360975]: step one asserts that such an assertion
+exists for all statements and assertions; step two asserts that the assertion is
+indeed a valid precondition for the choice of statement and postcondition; and
+step three asserts that any other precondition for ~s~ that derives ~Q~ must
+entail the weakest precondition.
 
 With the additional step of proving the rule of consequence as a meta rule, we
 can now give this formulation for the correctness of AMPSL's Hoare logic, which
@@ -1845,11 +1898,10 @@ correct : (∀ σ γ δ →
 #+end_src
 
 Constructing the weakest preconditions from an ~Assertion~ and ~Statement~
-should be a relatively simple recursion. I will sketch the ~if_then_else~,
-~invoke~ and ~for~ cases. For ~if e then s else s₁~, we can recursively
-construct the weakest preconditions ~P~ and ~P₁~ for ~s~ and ~s₁~ respectively.
-The weakest precondition of the full statement will then be ~P ∧ e ∨ P₁ ∧ inv
-e~.
+should be a relatively simple recursion. I will sketch the ~if_then_else~ and
+~invoke~ cases. For ~if e then s else s₁~, we can recursively construct the
+weakest preconditions ~P~ and ~P₁~ for ~s~ and ~s₁~ respectively.  The weakest
+precondition of the full statement will then be ~P ∧ e ∨ P₁ ∧ inv e~.
 
 To find the weakest precondition of a function invocation ~invoke (s ∙end) es~
 and ~Q~, first find the weakest precondition of ~s~ and ~Q′~ , where ~Q′~ is the
@@ -1858,23 +1910,23 @@ manner as the ~invoke~ AMPSL Hoare logic rule. Then, apply the inverse
 transformation to the auxiliary variables, and finally replace occurrences of
 the procedure-local variables with the arguments.
 
-(FIXME: describe how to compute weakest precondition of ~for~)
+# (FIXME: sketch the for case?)
 
 ** Using AMPSL for Proofs
 
-This chapter will describe how I converted the Arm pseudocode representing a
-Barrett reduction implementation [cite:@10.46586/tches.v2022.i1.482-505] into
-AMPSL, focusing on the modelling choices I made. I will then discuss how to use
-the AMPSL code in concrete proofs for specific values, before concluding with
-the steps necessary to abstract the proof to arbitrary values.
+This chapter will describe how I converted ASL representing a Barrett reduction
+implementation [cite:@10.46586/tches.v2022.i1.482-505] into AMPSL, focusing on
+the modelling choices I made. I will then discuss how to use the AMPSL code in
+concrete proofs for specific values, before concluding with the steps necessary
+to abstract the proof to arbitrary values.
 
 The most significant modelling decisions are the omissions of the ~TopLevel~
 [cite:@arm/DDI0553B.s §E2.1.400] and the ~InstructionExecute~
-[cite:@arm/DDI0553B.s §E2.1.225] pseudocode functions.  ~TopLevel~ primarily
-deals with debugging, halt and lockup processor states, none of which are
-relevant for the Barrett reduction or NTT correctness proofs I am working
-towards. ~InstructionExecute~ deals with fetching instructions and deciding
-whether to execute an instruction "beatwise" or linearly.
+[cite:@arm/DDI0553B.s §E2.1.225] ASL functions.  ~TopLevel~ primarily deals with
+debugging, halt and lockup processor states, none of which are relevant for the
+Barrett reduction or NTT correctness proofs I am working towards.
+~InstructionExecute~ deals with fetching instructions and deciding whether to
+execute an instruction "beatwise" or linearly.
 
 Most vector instructions for the Armv8.1-M architecture are executed beatwise. A
 vector register is a 128-bit value with four 32-bit lanes. Beatwise execution
@@ -1884,22 +1936,28 @@ before a previous instruction has finished on other lanes [cite:@arm/DDI0553B.s
 anticipated, essentially boiling down to any order that has the same result as
 executing the instructions linearly.
 
+# FIXME: figure padding?
 #+name: ExecBeats-impl
 #+caption: A side-by-side comparison of a simplified form of the ~ExecBeats~
 #+caption: function from [cite:@arm/DDI0553B.s §E2.1.121] versus the model used
-#+caption: in AMPSL. (FIXME: figure padding).
+#+caption: in AMPSL.
 #+begin_figure
 \begin{subfigure}[b]{0.45\textwidth}
 \begin{verbatim}
 boolean ExecBeats()
+
+
   newBeatComplete = BeatComplete
   _InstId = instId;
-  _CurrentInstrExecState = GetInstrExecState(instId);
+  _CurrentInstrExecState =
+    GetInstrExecState(instId);
   InstStateCheck(ThisInstr());
   for beatInTick = 0 to BEATS_PER_TICK-1
     beatId = beatInTick
-    beatFlagIdx = (instId * MAX_BEATS) + beatId;
-    if newBeatComplete[beatFlagIdx] == '0' then
+    beatFlagIdx = (instId * MAX_BEATS)
+                + beatId;
+    if newBeatComplete[beatFlagIdx] == '0'
+    then
       _BeatId          = beatId;
       _AdvanceVPTState = TRUE;
       cond             = DefaultCond();
@@ -1929,14 +1987,35 @@ boolean ExecBeats()
 ExecBeats : Procedure State [] →
             Procedure State []
 ExecBeats DecodeExec =
+
+
+
+
+
   for 4 (
     let beatId = var 0F in
+
+
+
+
     BeatId ≔ beatId ∙
     AdvanceVPTState ≔ lit true ∙
+
     invoke DecodeExec [] ∙
+
+
+
+
+
     if ! AdvanceVPTState
     then
       invoke VPTAdvance (beatId ∷ []))
+
+
+
+
+
+
   ∙end
 \end{minted}
 \caption{AMPSL model}
@@ -1955,15 +2034,125 @@ performs instruction decoding as specified in Chapter C2 of
 specified further down the instruction descriptions. I instead decided to give
 ~ExecBeats~ a procedure that performs the execution of a single instruction.
 
-The two instructions needed to model the Barrett reduction implementation
-algorithm by [cite/t:@10.46586/tches.v2022.i1.482-505] are ~VQMLRDH~ and ~VMLA~,
-given in (FIXME: figure) along with my AMPSL model counterparts. Both procedures
-end with a loop that copies the masked bytes of an intermediate result into the
-destination register.  This is the action performed by the ~copyMasked~
-procedure given back in [[*Example AMPSL Statements]].
+# FIXME: side by side code?
+#+name: vqmlrdh
+#+caption: Definition of the ~VQMLRDH~ instruction.
+#+begin_src agda2
+vqrdmulh : Instr.VQRDMULH → Procedure State []
+vqrdmulh =
+  declare (call GetCurInstrBeat []) (
+    -- let elmtMask = head (tail (var 0F)) in
+    let curBeat = head (var 0F) in
+    declare (! Q[ lit src₁ , curBeat ]) (
+    declare (lit (Vec.replicate false)) (
+    let elmtMask = head (tail (var 2F)) in
+    let curBeat = head (var 2F) in
+    -- let op₁ = var 1F in
+    let result = var 0F in
+    for (toℕ elements) (
+      let curBeat     = head (var 3F) in
+      let op₁         = var 2F in
+      let result      = var 1F in
+      let i           = var 0F in
+      let value       = (lit (ℤ.+ 2) * call sint (index-32 size op₁ i ∷ [])
+      ,                 * call sint (op₂ ∷ []) + rVal) >> toℕ esize in
+      let result′,sat = call (SignedSatQ (toℕ esize-1) (value ∷ [])) in
+      let sat         = head (tail result′,sat) in
+      let result′     = head result′,sat in
+      ,*index-32 size result i ≔ result′ ∙
+      if sat && hasBit elmtMask (fin e*esize>>3 (tup (i ∷ [])))
+      then
+        FPSCR-QC ≔ lit true
+    )) ∙
+    invoke copyMasked (lit acc ∷ result ∷ curBeat ∷ elmtMask ∷ [])
+    ))) ∙end
+  where
+  open Instr.VQRDMULH d
+  op₂ =
+    -- let elmtMast = head (tail (var 3F)) in
+    let curBeat = head (var 3F) in
+    -- let op₁ = var 2F in
+    -- let result = var 1F in
+    let i = var 0F in
+    [ (λ src₂ → index-32 size (index (! R) (lit src₂)) i)
+    , (λ src₂ → index-32 size (! Q[ lit src₂ , curBeat ]) i)
+    ]′ src₂
+  rVal = lit 1ℤ << toℕ esize-1
+#+end_src
 
-The final AMPSL procedure used to calculate Barrett reduction is in (FIXME:
-figure). As Barrett reduction is performed with a fixed positive base, the
+# FIXME: side by side code?
+#+name: vmla
+#+caption: Definition of the ~VMLA~ instruction.
+#+begin_src agda2
+vmla : Instr.VMLA → Procedure State []
+vmla =
+  declare (call GetCurInstrBeat []) (
+    -- let elmtMask = head (tail (var 0F)) in
+    let curBeat = head (var 0F) in
+    declare (! Q[ lit src₁ , curBeat ]) (
+    declare (lit (Vec.replicate false)) (
+    let elmtMask = head (tail (var 2F)) in
+    let curBeat = head (var 2F) in
+    -- let op₁ = var 1F in
+    let result = var 0F in
+    for (toℕ elements) (
+      let curBeat  = head (var 3F) in
+      let op₁      = var 2F in
+      let element₁ = call sint (index-32 size op₁ i ∷ []) in
+      let result   = var 1F in
+      let i        = var 0F in
+      let op₂      = ! Q[ lit acc , curBeat ] in
+      let element₃ = call sint (index-32 size op₂ i ∷ []) in
+      ,*index-32 size result i ≔
+        call (sliceⁱ 0) ((element₁ * element₂ + element₃) ∷ [])
+    )) ∙
+    invoke copyMasked (lit acc ∷ result ∷ curBeat ∷ elmtMask ∷ [])
+    )) ∙end
+  where
+  open Instr.VMLA d
+  element₂ = call sint (index-32 size (index (! R) (lit src₂)) (lit 0F) ∷ [])
+#+end_src
+
+The Barrett reduction implementation by
+[cite/t:@10.46586/tches.v2022.i1.482-505] requires two instructions: ~VQRDMULH~
+and ~VMLA~. The ASL and AMPSL definitions are given in [[vqmlrdh]] and [[vmla]]
+respectively. Like most beatwise instructions, both procedures end with a loop
+that copies the masked bytes of an intermediate result into the destination
+register.  This is the action performed by the ~copyMasked~ procedure given back
+in [[*Example AMPSL Statements]].
+
+#+name: barrett-impl
+#+caption: AMPSL model of Barrett reduction.
+#+begin_src agda2
+barrett : (n : ℕ) → ⦃ NonZero n ⦄ →
+          (t z : VecReg) (im : GenReg) →
+          Procedure State []
+barrett n t z im =
+  ,*index R (lit im) ≔
+    call (sliceⁱ 0) (lit (ℤ.+ (2147483648 div n)) ∷ []) ∙
+  invoke vqrdmulh-s32,t,z,m [] ∙
+  ,*index R (lit im) ≔
+    call (sliceⁱ 0) (lit (ℤ.- n) ∷ []) ∙
+  invoke vmla-s32,z,t,-n [] ∙end
+  where
+  vqrdmulh-s32,t,z,m =
+    ExecBeats (vqrdmulh (record
+      { size = 32bit
+      ; dest = t
+      ; src₁ = z
+      ; src₂ = inj₁ im
+      }))
+  vmla-s32,z,t,-n =
+    ExecBeats (vmla (record
+      { size     = 32bit
+      ; acc      = z
+      ; src₁     = t
+      ; src₂     = im
+      }))
+#+end_src
+
+The final AMPSL procedure used to calculate Barrett reduction is in
+[[barrett-impl]]. As Barrett reduction is performed with a fixed positive base, the
 procedure takes the base as a non-zero Agda natural number.
 
 This definition was tested by using the following snippet, instantiating
@@ -1985,12 +2174,13 @@ barrett-101 = do-barrett 101 (+ 1 ∷ + 7387 ∷ + 102 ∷ - 7473 ∷ [])
 
 Asking Agda to normalise the ~barrett-101~ value, which expands the function
 definitions to produce a single ~Statement~, results in a 16KB ~Statement~. When
-I tried to evaluate this denotationally, Agda crashed after 45 minutes.
+I tried to evaluate this denotationally, Agda exhausted heap memory after 45
+minutes.
 
 Despite this example being relatively small, the poor performance of AMPSL's
 denotational semantics highlights the necessity of the syntax-directed Hoare
 logic proof system. Using the Hoare logic rules to attempt to directly prove
-that barrett-101 has the desired effect leads to a very tedious proof of
+that ~barrett-101~ has the desired effect leads to a very tedious proof of
 expanding out the whole derivation tree.
 
 *** Proving Reusable Results
@@ -2011,7 +2201,7 @@ copyMasked-mask-true : ∀ {i v beat mask} {P Q : Assertion State Γ Δ} →
 
 Explained briefly, whenever the mask is all true (~I~), the procedure effectively
 reduces to a regular assignment rule in for AMPSL's Hoare logic. Expanding the
-proof derivation results in the following Agda term:
+proof derivation results in the following incomplete Agda term:
 
 #+begin_src agda2
 invoke
@@ -2024,16 +2214,17 @@ invoke
     {!!})
 #+end_src
 
-The holes correspond to a choice of loop invariant and then four logical
-implications: entering the loop; leaving the loop; showing the assignment
-preserves the loop invariant; and showing that skipping the assignment preserves
-the loop invariant.
+The missing Agda expressions correspond to a choice of loop invariant and then
+four logical implications: entering the loop; leaving the loop; showing the
+assignment preserves the loop invariant; and showing that skipping the
+assignment preserves the loop invariant.
 
 Whilst none of those steps are particularly tricky, they each require the proofs
-of many trivial-on-paper lemma. Due to the time constraints of the project, I
+of many trivial-on-paper lemmata. Due to the time constraints of the project, I
 have been unable to complete these proofs.
 
 * Proof of Barrett Reduction
+
 Barrett reduction is an algorithm to find a small representative of a value
 \(z\) modulo some base \(n\). Instead of having to perform expensive integer
 division, Barrett reduction instead uses an approximation function to precompute
@@ -2069,7 +2260,7 @@ One major time sink for this abstraction was the complete lack of support from
 preexisting Agda proofs. Ordered structures like the rings and fields required
 are not present in the Agda standard library version 1.7, and the
 discoverability of other Agda libraries is lacking. Thus much work was spent
-encoding these structures and proving many trivial lemma about them, such as
+encoding these structures and proving many trivial lemmata about them, such as
 sign-preservation, monotonicity and cancelling proofs.
 
 #+name: barrett-properties
@@ -2091,12 +2282,69 @@ base.
 
 * Summary and Conclusions
 
-# As you might imagine: summarizes the dissertation, and draws any
-# conclusions. Depending on the length of your work, and how well you
-# write, you may not need a summary here.
+In this work, I might vital progress into proving an implementation of the NTT
+algorithm for the M-profile vector extension of the Armv8.1-M architecture is
+functionally correct. I made progress on two fronts: giving a formal semantics
+for Armv8-M instructions, and proving properties about Barrett reduction.
 
-# You will generally want to draw some conclusions, and point to
-# potential future work.
+To provide formal semantics for Armv8-M instructions, I designed AMSPL, a
+language with formal semantics that models the ASL used to describe instruction
+semantics in the reference manual by [cite/t:@arm/DDI0553B.s]. As AMPSL models
+ASL, the behaviour of instructions can be modelled in AMPSL. Then, given enough
+time to prove a number of trivial lemmata, it is possible to specify the
+semantics of Armv8-M instructions through the semantics of AMPSL.
+
+To my knowledge, I have produced the first computer-assisted proof about the
+properties of Barrett reduction on arbitrary inputs. Further, I have not only
+proven this result for integers and rationals, but for any abstract ring and
+field with a suitable floor function. Barrett reduction is a vital subroutine in
+NTT so these proofs form a solid foundation towards the final goal.
+
+** Future Work on AMPSL
+
+Whilst the core syntax and semantics of AMPSL is complete, there are a wide
+range of proofs that are currently incomplete, due to the shear amount of
+trivial bookwork required to prove them. Here is a short list of some incomplete
+results:
+
+- Soundness of Hoare Logic :: There is proof that AMPSL's Hoare logic is sound
+  with respect to its denotational semantics for all rules excluding ~invoke~
+  ([[*Soundness of ~declare~, ~for~ and ~invoke~ ]]). The proof of this rule should
+  be relatively straight forward, the ~Term~  and ~Assertion~ homomorphisms it
+  performs are the most complex and still without proof.
+- Completeness of Hoare Logic :: I have only conjectured that AMPSL's Hoare
+  logic is complete, in the sense given in [[*Argument for a Proof of Correctness]].
+  Actually creating the weakest-precondition function requires the creation of
+  more ~Term~ and ~Assertion~ homomorphisms with more complex effects, and using
+  them in proofs requires proving more trivial lemmata.
+- Evaluating Denotational Semantics :: Asking Agda to normalise the denotational
+  semantics of any reasonable computation often results in Agda running out of
+  memory ([[*Using AMPSL for Proofs]]). Investigating and eliminating the cause of
+  this behaviour would make the user experience for AMPSL significantly better.
+- Using Hoare Logic Rules :: Using AMPSL's Hoare logic rules for any large
+  statement is tedious and cumbersome ([[*Using AMPSL for Proofs]]). Trying to
+  create abstract proofs of correctness for smaller statements requires the
+  manual proof of many trivial implications ([[*Proving Reusable Results]]).
+
+Whilst AMPSL has the potential to be an enormously useful tool for the formal
+verification of Armv8-M assembly algorithms, its current state does not live up
+to the task. Currently, to have any utility, a huge push needs to be made to
+complete proofs of many of the missing lemmata.
+
+** Future Work for Functional Correctness
+
+Whilst AMPSL is able to model ASL to a degree suitable for basic functional
+correctness proofs, a more rigorous tool is necessary for future endeavours. One
+option is to add Armv8-M as a backend in pre-existing functional correctness
+tools like Jasmin [cite:@10.1145/3133956.3134078] and Vale
+[cite:@10.1145/3290376]. Another option is to add the architecture as a backend
+in formally-verified compilers like CompCert [cite:@hal/01238879], enabling the
+use of high-level functional correctness tools for the platform.
+
+Another alternative, particularly for working on pre-existing, hand-written
+assembly routines, is to model the Armv8-M semantics using Sail. Unlike AMPSL,
+Sail will the full complexity of the ASL description of instructions, allowing
+for more rigorous proofs about the program semantics.
 
 #+latex: \label{lastcontentpage}
 
@@ -2107,8 +2355,310 @@ base.
 \appendix
 
 * AMPSL Syntax Definition
+
+#+begin_src agda2
+data Expression Σ Γ where
+  lit           : literalType t → Expression Σ Γ t
+  state         : ∀ i → Expression Σ Γ (lookup Σ i)
+  var           : ∀ i → Expression Σ Γ (lookup Γ i)
+  _≟_           : ⦃ HasEquality t ⦄ → Expression Σ Γ t → Expression Σ Γ t → Expression Σ Γ bool
+  _<?_          : ⦃ Ordered t ⦄ → Expression Σ Γ t → Expression Σ Γ t → Expression Σ Γ bool
+  inv           : Expression Σ Γ bool → Expression Σ Γ bool
+  _&&_          : Expression Σ Γ bool → Expression Σ Γ bool → Expression Σ Γ bool
+  _||_          : Expression Σ Γ bool → Expression Σ Γ bool → Expression Σ Γ bool
+  not           : Expression Σ Γ (bits n) → Expression Σ Γ (bits n)
+  _and_         : Expression Σ Γ (bits n) → Expression Σ Γ (bits n) → Expression Σ Γ (bits n)
+  _or_          : Expression Σ Γ (bits n) → Expression Σ Γ (bits n) → Expression Σ Γ (bits n)
+  [_]           : Expression Σ Γ t → Expression Σ Γ (array t 1)
+  unbox         : Expression Σ Γ (array t 1) → Expression Σ Γ t
+  merge         : Expression Σ Γ (array t m) → Expression Σ Γ (array t n) → Expression Σ Γ (fin (suc n)) → Expression Σ Γ (array t (n ℕ.+ m))
+  slice         : Expression Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → Expression Σ Γ (array t m)
+  cut           : Expression Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → Expression Σ Γ (array t n)
+  cast          : .(eq : m ≡ n) → Expression Σ Γ (array t m) → Expression Σ Γ (array t n)
+  -_            : ⦃ IsNumeric t ⦄ → Expression Σ Γ t → Expression Σ Γ t
+  _+_           : ⦃ isNum₁ : IsNumeric t₁ ⦄ → ⦃ isNum₂ : IsNumeric t₂ ⦄ → Expression Σ Γ t₁ → Expression Σ Γ t₂ → Expression Σ Γ (isNum₁ +ᵗ isNum₂)
+  _*_           : ⦃ isNum₁ : IsNumeric t₁ ⦄ → ⦃ isNum₂ : IsNumeric t₂ ⦄ → Expression Σ Γ t₁ → Expression Σ Γ t₂ → Expression Σ Γ (isNum₁ +ᵗ isNum₂)
+  _^_           : ⦃ IsNumeric t ⦄ → Expression Σ Γ t → ℕ → Expression Σ Γ t
+  _>>_          : Expression Σ Γ int → (n : ℕ) → Expression Σ Γ int
+  rnd           : Expression Σ Γ real → Expression Σ Γ int
+  fin           : ∀ {ms} (f : literalTypes (map fin ms) → Fin n) → Expression Σ Γ (tuple {n = k} (map fin ms)) → Expression Σ Γ (fin n)
+  asInt         : Expression Σ Γ (fin n) → Expression Σ Γ int
+  nil           : Expression Σ Γ (tuple [])
+  cons          : Expression Σ Γ t → Expression Σ Γ (tuple ts) → Expression Σ Γ (tuple (t ∷ ts))
+  head          : Expression Σ Γ (tuple (t ∷ ts)) → Expression Σ Γ t
+  tail          : Expression Σ Γ (tuple (t ∷ ts)) → Expression Σ Γ (tuple ts)
+  call          : (f : Function Σ Δ t) → All (Expression Σ Γ) Δ → Expression Σ Γ t
+  if_then_else_ : Expression Σ Γ bool → Expression Σ Γ t → Expression Σ Γ t → Expression Σ Γ t
+
+data Reference Σ Γ where
+  state : ∀ i → Reference Σ Γ (lookup Σ i)
+  var   : ∀ i → Reference Σ Γ (lookup Γ i)
+  [_]   : Reference Σ Γ t → Reference Σ Γ (array t 1)
+  unbox : Reference Σ Γ (array t 1) → Reference Σ Γ t
+  merge : Reference Σ Γ (array t m) → Reference Σ Γ (array t n) → Expression Σ Γ (fin (suc n)) → Reference Σ Γ (array t (n ℕ.+ m))
+  slice : Reference Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → Reference Σ Γ (array t m)
+  cut   : Reference Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → Reference Σ Γ (array t n)
+  cast  : .(eq : m ≡ n) → Reference Σ Γ (array t m) → Reference Σ Γ (array t n)
+  nil   : Reference Σ Γ (tuple [])
+  cons  : Reference Σ Γ t → Reference Σ Γ (tuple ts) → Reference Σ Γ (tuple (t ∷ ts))
+  head  : Reference Σ Γ (tuple (t ∷ ts)) → Reference Σ Γ t
+  tail  : Reference Σ Γ (tuple (t ∷ ts)) → Reference Σ Γ (tuple ts)
+
+data LocalReference Σ Γ where
+  var   : ∀ i → LocalReference Σ Γ (lookup Γ i)
+  [_]   : LocalReference Σ Γ t → LocalReference Σ Γ (array t 1)
+  unbox : LocalReference Σ Γ (array t 1) → LocalReference Σ Γ t
+  merge : LocalReference Σ Γ (array t m) → LocalReference Σ Γ (array t n) → Expression Σ Γ (fin (suc n)) → LocalReference Σ Γ (array t (n ℕ.+ m))
+  slice : LocalReference Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → LocalReference Σ Γ (array t m)
+  cut   : LocalReference Σ Γ (array t (n ℕ.+ m)) → Expression Σ Γ (fin (suc n)) → LocalReference Σ Γ (array t n)
+  cast  : .(eq : m ≡ n) → LocalReference Σ Γ (array t m) → LocalReference Σ Γ (array t n)
+  nil   : LocalReference Σ Γ (tuple [])
+  cons  : LocalReference Σ Γ t → LocalReference Σ Γ (tuple ts) → LocalReference Σ Γ (tuple (t ∷ ts))
+  head  : LocalReference Σ Γ (tuple (t ∷ ts)) → LocalReference Σ Γ t
+  tail  : LocalReference Σ Γ (tuple (t ∷ ts)) → LocalReference Σ Γ (tuple ts)
+
+data Statement Σ Γ where
+  _∙_           : Statement Σ Γ → Statement Σ Γ → Statement Σ Γ
+  skip          : Statement Σ Γ
+  _≔_           : Reference Σ Γ t → Expression Σ Γ t → Statement Σ Γ
+  declare       : Expression Σ Γ t → Statement Σ (t ∷ Γ) → Statement Σ Γ
+  invoke        : (f : Procedure Σ Δ) → All (Expression Σ Γ) Δ → Statement Σ Γ
+  if_then_      : Expression Σ Γ bool → Statement Σ Γ → Statement Σ Γ
+  if_then_else_ : Expression Σ Γ bool → Statement Σ Γ → Statement Σ Γ → Statement Σ Γ
+  for           : ∀ n → Statement Σ (fin n ∷ Γ) → Statement Σ Γ
+
+data LocalStatement Σ Γ where
+  _∙_           : LocalStatement Σ Γ → LocalStatement Σ Γ → LocalStatement Σ Γ
+  skip          : LocalStatement Σ Γ
+  _≔_           : LocalReference Σ Γ t → Expression Σ Γ t → LocalStatement Σ Γ
+  declare       : Expression Σ Γ t → LocalStatement Σ (t ∷ Γ) → LocalStatement Σ Γ
+  if_then_      : Expression Σ Γ bool → LocalStatement Σ Γ → LocalStatement Σ Γ
+  if_then_else_ : Expression Σ Γ bool → LocalStatement Σ Γ → LocalStatement Σ Γ → LocalStatement Σ Γ
+  for           : ∀ n → LocalStatement Σ (fin n ∷ Γ) → LocalStatement Σ Γ
+
+data Function Σ Γ ret where
+  init_∙_end : Expression Σ Γ ret → LocalStatement Σ (ret ∷ Γ) → Function Σ Γ ret
+
+data Procedure Σ Γ where
+  _∙end : Statement Σ Γ → Procedure Σ Γ
+#+end_src
+
 * AMPSL Denotational Semantics
+
+#+begin_src agda2
+expr (lit {t = t} x)        = const (Κ[ t ] x)
+expr {Σ = Σ} (state i)      = fetch i Σ ∘ proj₁
+expr {Γ = Γ} (var i)        = fetch i Γ ∘ proj₂
+expr (e ≟ e₁)               = lift ∘ does ∘ uncurry ≈-dec ∘ < expr e , expr e₁ >
+expr (e <? e₁)              = lift ∘ does ∘ uncurry <-dec ∘ < expr e , expr e₁ >
+expr (inv e)                = lift ∘ Bool.not ∘ lower ∘ expr e
+expr (e && e₁)              = lift ∘ uncurry (Bool._∧_ on lower) ∘ < expr e , expr e₁ >
+expr (e || e₁)              = lift ∘ uncurry (Bool._∨_ on lower) ∘ < expr e , expr e₁ >
+expr (not e)                = map (lift ∘ Bool.not ∘ lower) ∘ expr e
+expr (e and e₁)             = uncurry (zipWith (lift ∘₂ Bool._∧_ on lower)) ∘ < expr e , expr e₁ >
+expr (e or e₁)              = uncurry (zipWith (lift ∘₂ Bool._∨_ on lower)) ∘ < expr e , expr e₁ >
+expr [ e ]                  = (_∷ []) ∘ expr e
+expr (unbox e)              = Vec.head ∘ expr e
+expr (merge e e₁ e₂)        = uncurry (uncurry mergeVec) ∘ < < expr e , expr e₁ > , lower ∘ expr e₂ >
+expr (slice e e₁)           = uncurry sliceVec ∘ < expr e , lower ∘ expr e₁ >
+expr (cut e e₁)             = uncurry cutVec ∘ < expr e , lower ∘ expr e₁ >
+expr (cast eq e)            = castVec eq ∘ expr e
+expr (- e)                  = neg ∘ expr e
+expr (e + e₁)               = uncurry add ∘ < expr e , expr e₁ >
+expr (e * e₁)               = uncurry mul ∘ < expr e , expr e₁ >
+expr (e ^ x)                = flip pow x ∘ expr e
+expr (e >> n)               = lift ∘ flip (shift 2≉0) n ∘ lower ∘ expr e
+expr (rnd e)                = lift ∘ ⌊_⌋ ∘ lower ∘ expr e
+expr (fin {ms = ms} f e)    = lift ∘ f ∘ lowerFin ms ∘ expr e
+expr (asInt e)              = lift ∘ 𝕀⇒ℤ ∘ 𝕀.+_ ∘ Fin.toℕ ∘ lower ∘ expr e
+expr nil                    = const _
+expr (cons {ts = ts} e e₁)  = uncurry (cons′ ts) ∘ < expr e , expr e₁ >
+expr (head {ts = ts} e)     = head′ ts ∘ expr e
+expr (tail {ts = ts} e)     = tail′ ts ∘ expr e
+expr (call f es)            = fun f ∘ < proj₁ , exprs es >
+expr (if e then e₁ else e₂) = uncurry (uncurry Bool.if_then_else_) ∘ < < lower ∘ expr e , expr e₁ > , expr e₂ >
+
+exprs []            = const _
+exprs (e ∷ [])      = expr e
+exprs (e ∷ e₁ ∷ es) = < expr e , exprs (e₁ ∷ es) >
+
+ref {Σ = Σ} (state i)     = fetch i Σ ∘ proj₁
+ref {Γ = Γ} (var i)       = fetch i Γ ∘ proj₂
+ref [ r ]                 = (_∷ []) ∘ ref r
+ref (unbox r)             = Vec.head ∘ ref r
+ref (merge r r₁ e)        = uncurry (uncurry mergeVec) ∘ < < ref r , ref r₁ > , lower ∘ expr e >
+ref (slice r e)           = uncurry sliceVec ∘ < ref r , lower ∘ expr e >
+ref (cut r e)             = uncurry cutVec ∘ < ref r , lower ∘ expr e >
+ref (cast eq r)           = castVec eq ∘ ref r
+ref nil                   = const _
+ref (cons {ts = ts} r r₁) = uncurry (cons′ ts) ∘ < ref r , ref r₁ >
+ref (head {ts = ts} r)    = head′ ts ∘ ref r
+ref (tail {ts = ts} r)    = tail′ ts ∘ ref r
+
+locRef {Γ = Γ} (var i)       = fetch i Γ ∘ proj₂
+locRef [ r ]                 = (_∷ []) ∘ locRef r
+locRef (unbox r)             = Vec.head ∘ locRef r
+locRef (merge r r₁ e)        = uncurry (uncurry mergeVec) ∘ < < locRef r , locRef r₁ > , lower ∘ expr e >
+locRef (slice r e)           = uncurry sliceVec ∘ < locRef r , lower ∘ expr e >
+locRef (cut r e)             = uncurry cutVec ∘ < locRef r , lower ∘ expr e >
+locRef (cast eq r)           = castVec eq ∘ locRef r
+locRef nil                   = const _
+locRef (cons {ts = ts} r r₁) = uncurry (cons′ ts) ∘ < locRef r , locRef r₁ >
+locRef (head {ts = ts} r)    = head′ ts ∘ locRef r
+locRef (tail {ts = ts} r)    = tail′ ts ∘ locRef r
+
+assign {Σ = Σ} (state i)     val σ,γ = < updateAt i Σ val ∘ proj₁ , proj₂ >
+assign {Γ = Γ} (var i)       val σ,γ = < proj₁ , updateAt i Γ val ∘ proj₂ >
+assign [ r ]                 val σ,γ = assign r (Vec.head val) σ,γ
+assign (unbox r)             val σ,γ = assign r (val ∷ []) σ,γ
+assign (merge r r₁ e)        val σ,γ = assign r₁ (cutVec val (lower (expr e σ,γ))) σ,γ ∘ assign r (sliceVec val (lower (expr e σ,γ))) σ,γ
+assign (slice r e)           val σ,γ = assign r (mergeVec val (cutVec (ref r σ,γ) (lower (expr e σ,γ))) (lower (expr e σ,γ))) σ,γ
+assign (cut r e)             val σ,γ = assign r (mergeVec (sliceVec (ref r σ,γ) (lower (expr e σ,γ))) val (lower (expr e σ,γ))) σ,γ
+assign (cast eq r)           val σ,γ = assign r (castVec (sym eq) val) σ,γ
+assign nil                   val σ,γ = id
+assign (cons {ts = ts} r r₁) val σ,γ = assign r₁ (tail′ ts val) σ,γ ∘ assign r (head′ ts val) σ,γ
+assign (head {ts = ts} r)    val σ,γ = assign r (cons′ ts val (ref (tail r) σ,γ)) σ,γ
+assign (tail {ts = ts} r)    val σ,γ = assign r (cons′ ts (ref (head r) σ,γ) val) σ,γ
+
+locAssign {Γ = Γ} (var i)       val σ,γ = updateAt i Γ val
+locAssign [ r ]                 val σ,γ = locAssign r (Vec.head val) σ,γ
+locAssign (unbox r)             val σ,γ = locAssign r (val ∷ []) σ,γ
+locAssign (merge r r₁ e)        val σ,γ = locAssign r₁ (cutVec val (lower (expr e σ,γ))) σ,γ ∘ locAssign r (sliceVec val (lower (expr e σ,γ))) σ,γ
+locAssign (slice r e)           val σ,γ = locAssign r (mergeVec val (cutVec (locRef r σ,γ) (lower (expr e σ,γ))) (lower (expr e σ,γ))) σ,γ
+locAssign (cut r e)             val σ,γ = locAssign r (mergeVec (sliceVec (locRef r σ,γ) (lower (expr e σ,γ))) val (lower (expr e σ,γ))) σ,γ
+locAssign (cast eq r)           val σ,γ = locAssign r (castVec (sym eq) val) σ,γ
+locAssign nil                   val σ,γ = id
+locAssign (cons {ts = ts} r r₁) val σ,γ = locAssign r₁ (tail′ ts val) σ,γ ∘ locAssign r (head′ ts val) σ,γ
+locAssign (head {ts = ts} r)    val σ,γ = locAssign r (cons′ ts val (locRef (tail r) σ,γ)) σ,γ
+locAssign (tail {ts = ts} r)    val σ,γ = locAssign r (cons′ ts (locRef (head r) σ,γ) val) σ,γ
+
+stmt (s ∙ s₁)              = stmt s₁ ∘ stmt s
+stmt skip                  = id
+stmt (ref ≔ val)           = uncurry (uncurry (assign ref)) ∘ < < expr val , id > , id >
+stmt {Γ = Γ} (declare e s) = < proj₁ , tail′ Γ ∘ proj₂ > ∘ stmt s ∘ < proj₁ , uncurry (cons′ Γ) ∘ < expr e , proj₂ > >
+stmt (invoke p es)         = < proc p ∘ < proj₁ , exprs es > , proj₂ >
+stmt (if e then s)         = uncurry (uncurry Bool.if_then_else_) ∘ < < lower ∘ expr e , stmt s > , id >
+stmt (if e then s else s₁) = uncurry (uncurry Bool.if_then_else_) ∘ < < lower ∘ expr e , stmt s > , stmt s₁ >
+stmt {Γ = Γ} (for m s)     = Vec.foldl _ (flip λ i → (< proj₁ , tail′ Γ ∘ proj₂ > ∘ stmt s ∘ < proj₁ , cons′ Γ (lift i) ∘ proj₂ >) ∘_) id (Vec.allFin m)
+
+locStmt (s ∙ s₁)              = locStmt s₁ ∘ < proj₁ , locStmt s >
+locStmt skip                  = proj₂
+locStmt (ref ≔ val)           = uncurry (uncurry (locAssign ref)) ∘ < < expr val , id > , proj₂ >
+locStmt {Γ = Γ} (declare e s) = tail′ Γ ∘ locStmt s ∘ < proj₁ , uncurry (cons′ Γ) ∘ < expr e , proj₂ > >
+locStmt (if e then s)         = uncurry (uncurry Bool.if_then_else_) ∘ < < lower ∘ expr e , locStmt s > , proj₂ >
+locStmt (if e then s else s₁) = uncurry (uncurry Bool.if_then_else_) ∘ < < lower ∘ expr e , locStmt s > , locStmt s₁ >
+locStmt {Γ = Γ} (for m s)     = proj₂ ∘ Vec.foldl _ (flip λ i → (< proj₁ , tail′ Γ ∘ locStmt s > ∘ < proj₁ , cons′ Γ (lift i) ∘ proj₂ >) ∘_) id (Vec.allFin m)
+
+fun {Γ = Γ} (init e ∙ s end) = fetch zero (_ ∷ Γ) ∘ locStmt s ∘ < proj₁ , uncurry (cons′ Γ) ∘ < expr e , proj₂ > >
+
+proc (s ∙end) = proj₁ ∘ stmt s
+#+end_src
+
 * AMPSL Hoare Logic Definitions
+
+#+begin_src agda2
+data Term (Σ : Vec Type i) (Γ : Vec Type j) (Δ : Vec Type k) : Type → Set ℓ where
+  lit           : ⟦ t ⟧ₜ → Term Σ Γ Δ t
+  state         : ∀ i → Term Σ Γ Δ (lookup Σ i)
+  var           : ∀ i → Term Σ Γ Δ (lookup Γ i)
+  meta          : ∀ i → Term Σ Γ Δ (lookup Δ i)
+  _≟_           : ⦃ HasEquality t ⦄ → Term Σ Γ Δ t → Term Σ Γ Δ t → Term Σ Γ Δ bool
+  _<?_          : ⦃ Ordered t ⦄ → Term Σ Γ Δ t → Term Σ Γ Δ t → Term Σ Γ Δ bool
+  inv           : Term Σ Γ Δ bool → Term Σ Γ Δ bool
+  _&&_          : Term Σ Γ Δ bool → Term Σ Γ Δ bool → Term Σ Γ Δ bool
+  _||_          : Term Σ Γ Δ bool → Term Σ Γ Δ bool → Term Σ Γ Δ bool
+  not           : Term Σ Γ Δ (bits n) → Term Σ Γ Δ (bits n)
+  _and_         : Term Σ Γ Δ (bits n) → Term Σ Γ Δ (bits n) → Term Σ Γ Δ (bits n)
+  _or_          : Term Σ Γ Δ (bits n) → Term Σ Γ Δ (bits n) → Term Σ Γ Δ (bits n)
+  [_]           : Term Σ Γ Δ t → Term Σ Γ Δ (array t 1)
+  unbox         : Term Σ Γ Δ (array t 1) → Term Σ Γ Δ t
+  merge         : Term Σ Γ Δ (array t m) → Term Σ Γ Δ (array t n) → Term Σ Γ Δ (fin (suc n)) → Term Σ Γ Δ (array t (n ℕ.+ m))
+  slice         : Term Σ Γ Δ (array t (n ℕ.+ m)) → Term Σ Γ Δ (fin (suc n)) → Term Σ Γ Δ (array t m)
+  cut           : Term Σ Γ Δ (array t (n ℕ.+ m)) → Term Σ Γ Δ (fin (suc n)) → Term Σ Γ Δ (array t n)
+  cast          : .(eq : m ≡ n) → Term Σ Γ Δ (array t m) → Term Σ Γ Δ (array t n)
+  -_            : ⦃ IsNumeric t ⦄ → Term Σ Γ Δ t → Term Σ Γ Δ t
+  _+_           : ⦃ isNum₁ : IsNumeric t₁ ⦄ → ⦃ isNum₂ : IsNumeric t₂ ⦄ → Term Σ Γ Δ t₁ → Term Σ Γ Δ t₂ → Term Σ Γ Δ (isNum₁ +ᵗ isNum₂)
+  _*_           : ⦃ isNum₁ : IsNumeric t₁ ⦄ → ⦃ isNum₂ : IsNumeric t₂ ⦄ → Term Σ Γ Δ t₁ → Term Σ Γ Δ t₂ → Term Σ Γ Δ (isNum₁ +ᵗ isNum₂)
+  _^_           : ⦃ IsNumeric t ⦄ → Term Σ Γ Δ t → ℕ → Term Σ Γ Δ t
+  _>>_          : Term Σ Γ Δ int → (n : ℕ) → Term Σ Γ Δ int
+  rnd           : Term Σ Γ Δ real → Term Σ Γ Δ int
+  fin           : ∀ {ms} (f : literalTypes (map fin ms) → Fin n) → Term Σ Γ Δ (tuple {n = o} (map fin ms)) → Term Σ Γ Δ (fin n)
+  asInt         : Term Σ Γ Δ (fin n) → Term Σ Γ Δ int
+  nil           : Term Σ Γ Δ (tuple [])
+  cons          : Term Σ Γ Δ t → Term Σ Γ Δ (tuple ts) → Term Σ Γ Δ (tuple (t ∷ ts))
+  head          : Term Σ Γ Δ (tuple (t ∷ ts)) → Term Σ Γ Δ t
+  tail          : Term Σ Γ Δ (tuple (t ∷ ts)) → Term Σ Γ Δ (tuple ts)
+  call          : Function ts ts₁ t → All (Term Σ Γ Δ) ts → All (Term Σ Γ Δ) ts₁ → Term Σ Γ Δ t
+  if_then_else_ : Term Σ Γ Δ bool → Term Σ Γ Δ t → Term Σ Γ Δ t → Term Σ Γ Δ t
+#+end_src
+
+#+begin_src agda2
+⟦_⟧  : Term Σ Γ Δ t → ⟦ Σ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ → ⟦ Δ ⟧ₜₛ → ⟦ t ⟧ₜ
+⟦_⟧ₛ : All (Term Σ Γ Δ) ts → ⟦ Σ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ → ⟦ Δ ⟧ₜₛ → ⟦ ts ⟧ₜₛ
+
+⟦ lit x ⟧                σ γ δ = x
+⟦ state i ⟧              σ γ δ = fetch i Σ σ
+⟦ var i ⟧                σ γ δ = fetch i Γ γ
+⟦ meta i ⟧               σ γ δ = fetch i Δ δ
+⟦ e ≟ e₁ ⟧               σ γ δ = (lift ∘₂ does ∘₂ ≈-dec) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ e <? e₁ ⟧              σ γ δ = (lift ∘₂ does ∘₂ <-dec) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ inv e ⟧                σ γ δ = lift ∘ Bool.not ∘ lower $ ⟦ e ⟧ σ γ δ
+⟦ e && e₁ ⟧              σ γ δ = (lift ∘₂ Bool._∧_ on lower) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ e || e₁ ⟧              σ γ δ = (lift ∘₂ Bool._∨_ on lower) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ not e ⟧                σ γ δ = map (lift ∘ Bool.not ∘ lower) (⟦ e ⟧ σ γ δ)
+⟦ e and e₁ ⟧             σ γ δ = zipWith (lift ∘₂ Bool._∧_ on lower) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ e or e₁ ⟧              σ γ δ = zipWith (lift ∘₂ Bool._∨_ on lower) (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ [ e ] ⟧                σ γ δ = ⟦ e ⟧ σ γ δ ∷ []
+⟦ unbox e ⟧              σ γ δ = Vec.head (⟦ e ⟧ σ γ δ)
+⟦ merge e e₁ e₂ ⟧        σ γ δ = mergeVec (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ) (lower (⟦ e₂ ⟧ σ γ δ))
+⟦ slice e e₁ ⟧           σ γ δ = sliceVec (⟦ e ⟧ σ γ δ) (lower (⟦ e₁ ⟧ σ γ δ))
+⟦ cut e e₁ ⟧             σ γ δ = cutVec (⟦ e ⟧ σ γ δ) (lower (⟦ e₁ ⟧ σ γ δ))
+⟦ cast eq e ⟧            σ γ δ = castVec eq (⟦ e ⟧ σ γ δ)
+⟦ - e ⟧                  σ γ δ = neg (⟦ e ⟧ σ γ δ)
+⟦ e + e₁ ⟧               σ γ δ = add (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ e * e₁ ⟧               σ γ δ = mul (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ e ^ x ⟧                σ γ δ = pow (⟦ e ⟧ σ γ δ) x
+⟦ e >> n ⟧               σ γ δ = lift ∘ flip (shift 2≉0) n ∘ lower $ ⟦ e ⟧ σ γ δ
+⟦ rnd e ⟧                σ γ δ = lift ∘ ⌊_⌋ ∘ lower $ ⟦ e ⟧ σ γ δ
+⟦ fin {ms = ms} f e ⟧    σ γ δ = lift ∘ f ∘ lowerFin ms $ ⟦ e ⟧ σ γ δ
+⟦ asInt e ⟧              σ γ δ = lift ∘ 𝕀⇒ℤ ∘ 𝕀.+_ ∘ Fin.toℕ ∘ lower $ ⟦ e ⟧ σ γ δ
+⟦ nil ⟧                  σ γ δ = _
+⟦ cons {ts = ts} e e₁ ⟧  σ γ δ = cons′ ts (⟦ e ⟧ σ γ δ) (⟦ e₁ ⟧ σ γ δ)
+⟦ head {ts = ts} e ⟧     σ γ δ = head′ ts (⟦ e ⟧ σ γ δ)
+⟦ tail {ts = ts} e ⟧     σ γ δ = tail′ ts (⟦ e ⟧ σ γ δ)
+⟦ call f es es₁ ⟧        σ γ δ = Den.Semantics.fun 2≉0 f (⟦ es ⟧ₛ σ γ δ , ⟦ es₁ ⟧ₛ σ γ δ)
+⟦ if e then e₁ else e₂ ⟧ σ γ δ = Bool.if lower (⟦ e ⟧ σ γ δ) then ⟦ e₁ ⟧ σ γ δ else ⟦ e₂ ⟧ σ γ δ
+
+⟦_⟧ₛ               []            σ γ δ = _
+⟦_⟧ₛ {ts = _ ∷ ts} (e ∷ es)      σ γ δ = cons′ ts (⟦ e ⟧ σ γ δ) (⟦ es ⟧ₛ σ γ δ)
+#+end_src
+
+#+begin_src agda2
+data Assertion (Σ : Vec Type o) (Γ : Vec Type n) (Δ : Vec Type m) : Set (L.suc ℓ) where
+  all    : Assertion Σ Γ (t ∷ Δ) → Assertion Σ Γ Δ
+  some   : Assertion Σ Γ (t ∷ Δ) → Assertion Σ Γ Δ
+  pred   : Term Σ Γ Δ bool → Assertion Σ Γ Δ
+  true   : Assertion Σ Γ Δ
+  false  : Assertion Σ Γ Δ
+  ¬_     : Assertion Σ Γ Δ → Assertion Σ Γ Δ
+  _∧_    : Assertion Σ Γ Δ → Assertion Σ Γ Δ → Assertion Σ Γ Δ
+  _∨_    : Assertion Σ Γ Δ → Assertion Σ Γ Δ → Assertion Σ Γ Δ
+  _⟶_    : Assertion Σ Γ Δ → Assertion Σ Γ Δ → Assertion Σ Γ Δ
+#+end_src
+
+#+begin_src agda2
+  ⟦_⟧ : Assertion Σ Γ Δ → ⟦ Σ ⟧ₜₛ → ⟦ Γ ⟧ₜₛ → ⟦ Δ ⟧ₜₛ → Set ℓ
+
+  ⟦_⟧ {Δ = Δ} (all P)  σ γ δ = ∀ x → ⟦ P ⟧ σ γ (cons′ Δ x δ)
+  ⟦_⟧ {Δ = Δ} (some P) σ γ δ = ∃ λ x → ⟦ P ⟧ σ γ (cons′ Δ x δ)
+  ⟦ pred p ⟧           σ γ δ = Lift ℓ (Bool.T (lower (Term.⟦ p ⟧ σ γ δ)))
+  ⟦ true ⟧             σ γ δ = Lift ℓ ⊤
+  ⟦ false ⟧            σ γ δ = Lift ℓ ⊥
+  ⟦ ¬ P ⟧              σ γ δ = ⟦ P ⟧ σ γ δ → ⊥
+  ⟦ P ∧ Q ⟧            σ γ δ = ⟦ P ⟧ σ γ δ × ⟦ Q ⟧ σ γ δ
+  ⟦ P ∨ Q ⟧            σ γ δ = ⟦ P ⟧ σ γ δ ⊎ ⟦ Q ⟧ σ γ δ
+  ⟦ P ⟶ Q ⟧            σ γ δ = ⟦ P ⟧ σ γ δ → ⟦ Q ⟧ σ γ δ
+#+end_src
 
 #+latex: \label{lastpage}
 #+latex: %TC:endignore

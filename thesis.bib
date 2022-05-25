@@ -209,3 +209,124 @@ date={2021-11-19},
 pages={221–244},
 doi={10.46586/tches.v2022.i1.221-244}
 }
+
+@phdthesis{cs.cmu.edu/girard-72-thesis,
+author={Girard, Jean-Yves},
+title={Interprétation fonctionnelle et élimination des coupures de l'arithmétique d'ordre supérieur},
+institution={University of Paris VII},
+date={1972-06-26},
+language={french},
+pagetotal={230}
+}
+
+@article{10.1145/360933.360975,
+author = {Dijkstra, Edsger W.},
+title = {Guarded Commands, Nondeterminacy and Formal Derivation of Programs},
+issue_date = {Aug. 1975},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {18},
+number = {8},
+issn = {0001-0782},
+doi = {10.1145/360933.360975},
+abstract = {So-called “guarded commands” are introduced as a building block for alternative and repetitive constructs that allow nondeterministic program components for which at least the activity evoked, but possibly even the final state, is not necessarily uniquely determined by the initial state. For the formal derivation of programs expressed in terms of these constructs, a calculus will be be shown.},
+journal = {Commun. ACM},
+date = {1975-08},
+pages = {453–457},
+numpages = {5},
+keywords = {termination, program semantics, case-construction, programming methodology, repetition, programming language semantics, correctness proof, nondeterminancy, sequencing primitives, programming languages, derivation of programs}
+}
+
+@INPROCEEDINGS{10.1109/SP.2019.00005,
+author={Erbsen, Andres and Philipoom, Jade and Gross, Jason and Sloan, Robert and Chlipala, Adam},
+booktitle={2019 IEEE Symposium on Security and Privacy (SP)},
+title={Simple High-Level Code for Cryptographic Arithmetic - With Proofs, Without Compromises},
+year={2019},
+volume={},
+number={},
+pages={1202-1219},
+doi={10.1109/SP.2019.00005}
+}
+
+@inproceedings{10.1145/3319535.3354199,
+author = {Fu, Yu-Fu and Liu, Jiaxiang and Shi, Xiaomu and Tsai, Ming-Hsien and Wang, Bow-Yaw and Yang, Bo-Yin},
+title = {Signed Cryptographic Program Verification with Typed CryptoLine},
+year = {2019},
+isbn = {9781450367479},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+doi = {10.1145/3319535.3354199},
+abstract = {We develop an automated formal technique to specify and verify signed computation in cryptographic programs. In addition to new instructions, we introduce a type system to detect type errors in programs. A type inference algorithm is also provided to deduce types and instruction variants in cryptographic programs. In order to verify signed cryptographic C programs, we develop a translator from the GCC intermediate representation to our language. Using our technique, we have verified 82 C functions in cryptography libraries including NaCl, wolfSSL, bitcoin, OpenSSL, and BoringSSL.},
+booktitle = {Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communications Security},
+pages = {1591–1606},
+numpages = {16},
+keywords = {formal verification, cryptographic programs, model checking},
+location = {London, United Kingdom},
+series = {CCS '19}
+}
+
+@article{10.1007/s00165-014-0326-7,
+author={Kirchner, Florent and Kosmatov, Nikolai and Prevosto, Virgile and Signoles, Julien and Yakobowski, Boris},
+title = {Frama-C: A software analysis perspective},
+date = {2015-01-09},
+pages = {573-609},
+numpages = {37},
+journal = {Formal Aspects of Computing},
+abstract = {Frama-C is a source code analysis platform that aims at conducting verification of industrial-size C programs. It provides its users with a collection of plug-ins that perform static analysis, deductive verification, and testing, for safety- and security-critical software. Collaborative verification across cooperating plug-ins is enabled by their integration on top of a shared kernel and datastructures, and their compliance to a common specification language. This foundational article presents a consolidated view of the platform, its main and composite analyses, and some of its industrial achievements.},
+doi = {10.1007/s00165-014-0326-7},
+number = {3},
+volume = {27}
+}
+
+@InProceedings{10.1007/978-3-642-19718-5_1,
+author="Appel, Andrew W.",
+editor="Barthe, Gilles",
+title="Verified Software Toolchain",
+booktitle="Programming Languages and Systems",
+year="2011",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="1--17",
+abstract="The software toolchain includes static analyzers to check assertions about programs; optimizing compilers to translate programs to machine language; operating systems and libraries to supply context for programs. Our Verified Software Toolchain verifies with machine-checked proofs that the assertions claimed at the top of the toolchain really hold in the machine-language program, running in the operating-system context, on a weakly-consistent-shared-memory machine.",
+isbn="978-3-642-19718-5",
+doi={10.1007/978-3-642-19718-5_1}
+}
+
+@article{10.1145/3290376,
+author = {Fromherz, Aymeric and Giannarakis, Nick and Hawblitzel, Chris and Parno, Bryan and Rastogi, Aseem and Swamy, Nikhil},
+title = {A Verified, Efficient Embedding of a Verifiable Assembly Language},
+year = {2019},
+issue_date = {January 2019},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {3},
+number = {POPL},
+url = {https://doi.org/10.1145/3290376},
+doi = {10.1145/3290376},
+abstract = {High-performance cryptographic libraries often mix code written in a high-level language with code written in assembly. To support formally verifying the correctness and security of such hybrid programs, this paper presents an embedding of a subset of x64 assembly language in F* that allows efficient verification of both assembly and its interoperation with C code generated from F*. The key idea is to use the computational power of a dependent type system's type checker to run a verified verification-condition generator during type checking. This allows the embedding to customize the verification condition sent by the type checker to an SMT solver. By combining our proof-by-reflection style with SMT solving, we demonstrate improved automation for proving the correctness of assembly-language code. This approach has allowed us to complete the first-ever proof of correctness of an optimized implementation of AES-GCM, a cryptographic routine used by 90\% of secure Internet traffic.},
+journal = {Proc. ACM Program. Lang.},
+month = {jan},
+articleno = {63},
+numpages = {30},
+keywords = {Assembly language, domain-specific languages, cryptography}
+}
+
+@article{10.1145/3391900,
+author = {Lukyanov, Georgy and Mokhov, Andrey and Lechner, Jakob},
+title = {Formal Verification of Spacecraft Control Programs},
+year = {2020},
+issue_date = {September 2020},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {19},
+number = {5},
+issn = {1539-9087},
+url = {https://doi.org/10.1145/3391900},
+doi = {10.1145/3391900},
+abstract = {Verification of correctness of control programs is an essential task in the development of space electronics; it is difficult and typically outweighs design and programming tasks in terms of development hours. This article presents a verification approach designed to help spacecraft engineers reduce the effort required for formal verification of low-level control programs executed on custom hardware.The verification approach is demonstrated on an industrial case study. We present a REDuced instruction set for Fixed-point and INteger arithmetic (REDFIN), a processing core used in space missions, and its formal semantics expressed using the proposed metalanguage for state transformers, followed by examples of verification of simple control programs.},
+journal = {ACM Trans. Embed. Comput. Syst.},
+month = {oct},
+articleno = {37},
+numpages = {18},
+keywords = {instruction set architecture, Formal verification, domain-specific languages, functional programming}
+}
