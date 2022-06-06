@@ -2109,6 +2109,54 @@ weakenBuilder-proof {t = t} {Γ = Γ} i v = record
     eq = Vecₚ.insert-punchIn Γ i t j
 #+end_src
 * Example Armv8-M Instruction Models in AMPSL
+~ExecBeats~ in Arm pseudocode:
+
+\begin{verbatim}
+boolean ExecBeats()
+  newBeatComplete = BeatComplete
+  _InstId = instId;
+  _CurrentInstrExecState = GetInstrExecState(instId);
+  InstStateCheck(ThisInstr());
+  for beatInTick = 0 to BEATS_PER_TICK-1
+    beatId = beatInTick
+    beatFlagIdx = (instId * MAX_BEATS) + beatId;
+    if newBeatComplete[beatFlagIdx] == '0'
+    then
+      _BeatId          = beatId;
+      _AdvanceVPTState = TRUE;
+      cond             = DefaultCond();
+      DecodeExecute(ThisInstr(),
+                    ThisInstrAddr(),
+                    ThisInstrLength() == 2,
+                    cond);
+      newBeatComplete[beatFlagIdx] = '1';
+      if _AdvanceVPTState then
+        VPTAdvance(beatId);
+  commitState = newBeatComplete[MAX_BEATS-1:0] == Ones(MAX_BEATS);
+  if commitState then
+    newBeatComplete = LSR(newBeatComplete, MAX_BEATS);
+  BeatComplete = newBeatComplete
+  return commitState;
+\end{verbatim}
+
+Simplified ~ExecBeats~ in AMPSL:
+
+#+begin_src agda2
+ExecBeats : Procedure State [] → Procedure State []
+ExecBeats DecodeExec =
+  for 4 (
+    let beatId = var 0F in
+    BeatId ≔ beatId ∙
+    AdvanceVPTState ≔ lit true ∙
+    invoke DecodeExec [] ∙
+    if ! AdvanceVPTState then
+      invoke VPTAdvance (beatId ∷ []))
+  ∙end
+#+end_src
+
+\newpage
+~VQMLRD~ in AMPSL:
+
 #+begin_src agda2
 vqrdmulh : Instr.VQRDMULH → Procedure State []
 vqrdmulh =
@@ -2127,13 +2175,12 @@ vqrdmulh =
       let result      = var 1F in
       let i           = var 0F in
       let value       = (lit (ℤ.+ 2) * call sint (index-32 size op₁ i ∷ [])
-      ,                 * call sint (op₂ ∷ []) + rVal) >> toℕ esize in
+                      * call sint (op₂ ∷ []) + rVal) >> toℕ esize in
       let result′,sat = call (SignedSatQ (toℕ esize-1) (value ∷ [])) in
       let sat         = head (tail result′,sat) in
       let result′     = head result′,sat in
       ,*index-32 size result i ≔ result′ ∙
-      if sat && hasBit elmtMask (fin e*esize>>3 (tup (i ∷ [])))
-      then
+      if sat && hasBit elmtMask (fin e*esize>>3 (tup (i ∷ []))) then
         FPSCR-QC ≔ lit true
     )) ∙
     invoke copyMasked (lit acc ∷ result ∷ curBeat ∷ elmtMask ∷ [])
@@ -2141,10 +2188,7 @@ vqrdmulh =
   where
   open Instr.VQRDMULH d
   op₂ =
-    -- let elmtMast = head (tail (var 3F)) in
     let curBeat = head (var 3F) in
-    -- let op₁ = var 2F in
-    -- let result = var 1F in
     let i = var 0F in
     [ (λ src₂ → index-32 size (index (! R) (lit src₂)) i)
     , (λ src₂ → index-32 size (! Q[ lit src₂ , curBeat ]) i)
@@ -2152,17 +2196,18 @@ vqrdmulh =
   rVal = lit 1ℤ << toℕ esize-1
 #+end_src
 
+\newpage
+~VMLA~ in AMPSL:
+
 #+begin_src agda2
 vmla : Instr.VMLA → Procedure State []
 vmla =
   declare (call GetCurInstrBeat []) (
-    -- let elmtMask = head (tail (var 0F)) in
     let curBeat = head (var 0F) in
     declare (! Q[ lit src₁ , curBeat ]) (
     declare (lit (Vec.replicate false)) (
     let elmtMask = head (tail (var 2F)) in
     let curBeat = head (var 2F) in
-    -- let op₁ = var 1F in
     let result = var 0F in
     for (toℕ elements) (
       let curBeat  = head (var 3F) in
@@ -2181,88 +2226,6 @@ vmla =
   open Instr.VMLA d
   element₂ = call sint (index-32 size (index (! R) (lit src₂)) (lit 0F) ∷ [])
 #+end_src
-
-#+begin_figure
-\begin{subfigure}[b]{0.45\textwidth}
-\begin{verbatim}
-boolean ExecBeats()
-
-
-  newBeatComplete = BeatComplete
-  _InstId = instId;
-  _CurrentInstrExecState =
-    GetInstrExecState(instId);
-  InstStateCheck(ThisInstr());
-  for beatInTick = 0 to BEATS_PER_TICK-1
-    beatId = beatInTick
-    beatFlagIdx = (instId * MAX_BEATS)
-                + beatId;
-    if newBeatComplete[beatFlagIdx] == '0'
-    then
-      _BeatId          = beatId;
-      _AdvanceVPTState = TRUE;
-      cond             = DefaultCond();
-      DecodeExecute(
-        ThisInstr(),
-        ThisInstrAddr(),
-        ThisInstrLength() == 2,
-        cond);
-      newBeatComplete[beatFlagIdx] = '1';
-      if _AdvanceVPTState then
-        VPTAdvance(beatId);
-  commitState =
-    newBeatComplete[MAX_BEATS-1:0] ==
-    Ones(MAX_BEATS);
-  if commitState then
-    newBeatComplete =
-      LSR(newBeatComplete, MAX_BEATS);
-  BeatComplete = newBeatComplete
-  return commitState;
-\end{verbatim}
-\caption{Arm pseudocode}
-\label{ExecBeats-impl-Arm}
-\end{subfigure}
-\hfill
-\begin{subfigure}[b]{0.45\textwidth}
-\begin{minted}{agda}
-ExecBeats : Procedure State [] →
-            Procedure State []
-ExecBeats DecodeExec =
-
-
-
-
-
-  for 4 (
-    let beatId = var 0F in
-
-
-
-
-    BeatId ≔ beatId ∙
-    AdvanceVPTState ≔ lit true ∙
-
-    invoke DecodeExec [] ∙
-
-
-
-
-
-    if ! AdvanceVPTState then
-      invoke VPTAdvance
-             (beatId ∷ []))
-
-
-
-
-
-
-  ∙end
-\end{minted}
-\caption{AMPSL model}
-\label{ExecBeats-impl-AMPSL}
-\end{subfigure}
-#+end_figure
 
 #+latex: \label{lastpage}
 #+latex: %TC:endignore
